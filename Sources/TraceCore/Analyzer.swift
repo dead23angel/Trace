@@ -149,6 +149,8 @@ public struct RangeReport: Sendable {
     public var files: [ItemTotal] = []
     /// Time per Mac; the label is the device identifier, empty for this Mac.
     public var byDevice: [ItemTotal] = []
+    /// Time per project, by name; filled when a `ProjectResolver` is given.
+    public var projects: [ItemTotal] = []
     public init() {}
 
     public var activeDays: Int { days.filter { $0.total > 0 }.count }
@@ -157,7 +159,7 @@ public struct RangeReport: Sendable {
 }
 
 public struct TreeNode: Identifiable, Sendable {
-    public enum Kind: Sendable { case tag, app, file, web, window, page }
+    public enum Kind: Sendable { case tag, app, file, web, window, page, project }
     public let id: String
     public let kind: Kind
     public let label: String
@@ -167,7 +169,7 @@ public struct TreeNode: Identifiable, Sendable {
     public var children: [TreeNode]?
 }
 
-public enum TreeMode: Sendable { case byTag, byApp }
+public enum TreeMode: Sendable { case byTag, byApp, byProject }
 
 public enum Analyzer {
     struct Item { let kind: TreeNode.Kind; let label: String; let shortLabel: String; let page: String? }
@@ -258,7 +260,8 @@ public enum Analyzer {
     /// (empty days included), an hour-by-weekday grid, and the most used
     /// sites and files.
     public static func report(_ events: [ActivityEvent], in range: DateInterval,
-                              tagger: Tagger, calendar: Calendar = .current) -> RangeReport {
+                              tagger: Tagger, calendar: Calendar = .current,
+                              projects resolver: ProjectResolver? = nil) -> RangeReport {
         var report = RangeReport()
         let whole = summarize(events, in: range, tagger: tagger, calendar: calendar)
         report.total = whole.total
@@ -271,9 +274,13 @@ public enum Analyzer {
         var sites: [String: TimeInterval] = [:]
         var files: [String: TimeInterval] = [:]
         var perDevice: [String: TimeInterval] = [:]
+        var perProject: [String: TimeInterval] = [:]
         for e in events {
             guard let span = clip(e, to: range) else { continue }
             perDevice[e.device, default: 0] += span.duration
+            if let path = e.path, let project = resolver?.project(for: path) {
+                perProject[project.name, default: 0] += span.duration
+            }
             let tag = tagger.primary(for: e)
             let tagID = tag?.id ?? 0
             if let tag { tagByID[tagID] = tag }
@@ -302,6 +309,7 @@ public enum Analyzer {
         }
         report.heat = heat.map { HeatCell(weekday: $0.key / 24, hour: $0.key % 24, seconds: $0.value) }
         report.sites = sites.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
+        report.projects = perProject.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
         report.byDevice = perDevice.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
         report.files = files.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
         return report
@@ -424,19 +432,23 @@ public enum Analyzer {
     }
 
     /// The drill-down outline: tag › app › file or site › page.
+    /// With `.byProject` the top level is the project each file belongs to
+    /// (see `ProjectResolver`); activity without a file is left out.
     public static func tree(_ events: [ActivityEvent], in day: DateInterval,
-                            tagger: Tagger, mode: TreeMode) -> [TreeNode] {
+                            tagger: Tagger, mode: TreeMode, projects: ProjectResolver? = nil) -> [TreeNode] {
         struct Leaf {
             let tag: Tag?
             let bundleID: String
             let appName: String
             let item: Item?
             let seconds: TimeInterval
+            let project: ProjectResolver.Project?
         }
         let leaves: [Leaf] = events.compactMap { e in
             guard let span = clip(e, to: day) else { return nil }
             return Leaf(tag: tagger.primary(for: e), bundleID: e.bundleID, appName: e.appName,
-                        item: item(for: e), seconds: span.duration)
+                        item: item(for: e), seconds: span.duration,
+                        project: mode == .byProject ? e.path.flatMap { projects?.project(for: $0) } : nil)
         }
 
         func total(_ xs: [Leaf]) -> TimeInterval { xs.reduce(0) { $0 + $1.seconds } }
@@ -476,6 +488,14 @@ public enum Analyzer {
         }
 
         switch mode {
+        case .byProject:
+            return grouped(leaves.filter { $0.project != nil }) { $0.project!.id }.map { group in
+                let project = group[0].project!
+                let id = "project-\(project.id)"
+                let tag = group.max { $0.seconds < $1.seconds }?.tag
+                return TreeNode(id: id, kind: .project, label: project.name, seconds: total(group),
+                                tag: tag, bundleID: nil, children: appNodes(group, prefix: id, tag: nil))
+            }
         case .byApp:
             return appNodes(leaves, prefix: "app", tag: nil)
         case .byTag:

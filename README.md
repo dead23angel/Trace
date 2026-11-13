@@ -26,11 +26,23 @@ Trace sits in the menu bar and records which app, window, file and web page is i
 
 ## Features
 
+### The day in lanes
+
+One lane per tag or app, with sound and calls underneath, so you can see what happened at the same time: coding with music on, or a meeting that ran in the background. Trace notes which apps are playing sound or using the microphone, never what is played or said. Watching a video without touching the keyboard no longer counts as being away.
+
+![The day as parallel lanes, with sound and calls below](docs/screenshots/lanes.png)
+
 ### A detailed timeline
 
 Expand the day level by level: tag › app › file or site › page. The day runs top to bottom on the right; click a session or drag across any stretch of it, and the outline sums up only that period.
 
 ![Timeline with a drill-down outline and the day laid out top to bottom](docs/screenshots/timeline.png)
+
+### Projects, found for you
+
+Trace works out which project each file belongs to from the folder it is in (a git repository, a Swift package, an Obsidian vault, or simply the folder inside Documents), so you can see time per project without setting anything up.
+
+![Time grouped by project](docs/screenshots/projects.png)
 
 ### Every record, one by one
 
@@ -46,11 +58,17 @@ Eight built-in tags (Development, Office, Study, Communication, Entertainment, G
 |---|---|
 | ![Preset and custom tags](docs/screenshots/tags.png) | ![Rules and untagged activity](docs/screenshots/rules.png) |
 
+### Focus and goals
+
+The overview shows how focused the day was: time in deep work (25 minutes or more of focus work in one go), how often you switched apps each hour, and which apps pulled you away most. Give a tag a daily goal, at least or at most so much, and follow it as a ring with a streak.
+
 ### Reports
 
-A week, a month or a year at a glance: time per day stacked by tag, the hours you are usually active, and the sites and files you spent the most time on. Any period can be exported as CSV.
+A week, a month or a year at a glance: a short review in plain sentences of what changed since the period before, time per day stacked by tag, the hours you are usually active, and the projects, sites and files you spent the most time on. The year view adds a calendar with one square per day. Any period can be exported as CSV.
 
-![Weekly report with daily totals, a heat map and top sites and files](docs/screenshots/reports.png)
+![Weekly report with a review, daily totals and a heat map](docs/screenshots/reports.png)
+
+![A year with one square per day](docs/screenshots/year.png)
 
 ### Several Macs, one picture
 
@@ -70,7 +88,7 @@ Native SwiftUI, light and dark appearance, English and Simplified Chinese (switc
 - **Sync only if you turn it on.** With a sync folder set, your records are also written there as readable files, and whatever syncs that folder carries them. Anyone who can open the folder can read them. Turn sync off and Trace stops writing to it.
 - **No keystrokes, no screenshots.** Trace reads the name of the app in front and, through the macOS Accessibility API, the title, document path and page address of its focused window. Nothing else.
 - **URLs without the sensitive part.** Query strings, fragments and credentials are removed before a URL is stored.
-- **You choose what is recorded.** Window titles, file paths and web addresses can each be turned off, and any app can be excluded completely.
+- **You choose what is recorded.** Window titles, file paths, web addresses, and sound and calls can each be turned off, and any app can be excluded completely.
 - **Your data is yours.** Export it as CSV or erase it from Settings at any time.
 
 ## Install
@@ -109,11 +127,11 @@ Useful commands:
 
 | Part | Where | What it does |
 |---|---|---|
-| Capture | `Sources/Trace/Capture` | Reads the frontmost app from `NSWorkspace`, the focused window through the Accessibility API, and idle time from `CGEventSource`, every two seconds. |
+| Capture | `Sources/Trace/Capture` | Reads the frontmost app from `NSWorkspace`, the focused window through the Accessibility API, idle time from `CGEventSource`, and which apps play sound or use the microphone from Core Audio, every two seconds. |
 | Storage | `Sources/TraceCore/EventStore.swift` | SQLite via [GRDB](https://github.com/groue/GRDB.swift). Consecutive identical samples extend one event, so there is one row per stay. Idle time is not stored; it appears as gaps. |
 | Tagging | `Sources/TraceCore/Tagging.swift` | Rules match on app, app category, file path, URL or window title. Tags added or removed by hand on a single record override the rules. |
 | Sync | `Sources/TraceCore/SyncEngine.swift` | Each Mac writes one file per day into its own subfolder of the sync folder and reads the other Macs' files, so two Macs never edit the same file. For tags and rules the most recent edit wins. |
-| Analysis | `Sources/TraceCore/Analyzer.swift` | Day summary, sessions, the drill-down outline, reports and CSV export. |
+| Analysis | `Sources/TraceCore/Analyzer.swift`, `Insights.swift` | Day summary, sessions, the drill-down outline, lanes, focus, projects, reports, reviews and CSV export. |
 | Interface | `Sources/Trace/Views` | SwiftUI. Colours and shared controls live in `Theme.swift`. |
 
 `TraceCore` has no user interface and is covered by unit tests; the app target adds capture and the interface on top of it.
@@ -124,7 +142,8 @@ Copy `Resources/zh-Hans.lproj` to `Resources/<code>.lproj`, translate the right-
 
 ## Known limitations
 
-- Watching a video without touching the keyboard or mouse counts as away once the idle time has passed.
+- A silent video or a long read without touching the keyboard or mouse counts as away once the idle time has passed. With sound playing in the app in front, it does not.
+- Sound and calls are recognised by which app uses the speakers or the microphone. An app that keeps the microphone open without a call, such as a dictation tool, shows up as a call; exclude it in Settings.
 - Private browsing windows are not detected and are recorded like any other window. Exclude the browser or turn off web addresses if that matters to you.
 - Page addresses depend on what each browser exposes to the Accessibility API. Safari and Chromium-based browsers (Chrome, Edge, Arc, Brave) are covered; others may only report the window title.
 

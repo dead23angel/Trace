@@ -73,7 +73,22 @@ private struct TagCard: View {
     let tag: Tag
     let stats: TagWeekStats
 
+    @State private var editsGoal = false
+
     private var rules: [Rule] { model.rules.filter { $0.tagID == tag.id } }
+    private var goal: Goal? { model.goals.first { $0.tagID == tag.id } }
+
+    private func chip(_ text: String, symbol: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
+            Text(text).font(.system(size: 11, weight: .medium)).lineLimit(1)
+        }
+        .foregroundStyle(Theme.muted)
+        .padding(.horizontal, 7)
+        .frame(height: 20)
+        .background(Theme.bg, in: Capsule())
+        .contentShape(Capsule())
+    }
 
     var body: some View {
         let id = tag.id ?? 0
@@ -107,6 +122,28 @@ private struct TagCard: View {
                     .foregroundStyle(Theme.muted)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
+                HStack(spacing: 6) {
+                    Menu {
+                        ForEach(TagRole.allCases, id: \.self) { role in
+                            Button(role.title) { model.setRole(role, for: tag) }
+                        }
+                    } label: {
+                        chip(tag.role.title, symbol: tag.role == .focus ? "scope" : (tag.role == .distraction ? "moon.zzz" : "circle.dashed"))
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help(L("How this tag counts when judging focus"))
+                    Button { editsGoal = true } label: {
+                        chip(goal?.summary ?? L("Set goal"), symbol: "target")
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $editsGoal) {
+                        GoalEditor(tag: tag) { editsGoal = false }.environmentObject(model)
+                    }
+                    Spacer(minLength: 0)
+                }
                 Hairline()
                 HStack {
                     Text(footnote).foregroundStyle(Theme.muted)
@@ -143,7 +180,8 @@ extension Rule {
         "us.zoom.xos": "Zoom", "com.microsoft.teams2": "Teams", "com.electron.lark": "Lark",
         "com.valvesoftware.steam": "Steam", "com.epicgames.EpicGamesLauncher": "Epic Games",
         "org.mozilla.firefox": "Firefox", "com.kingsoft.wpsoffice.mac": "WPS Office", "dev.zed.Zed": "Zed",
-        "com.brave.Browser": "Brave", "com.microsoft.VSCode": "VS Code", "com.apple.MobileSMS": "Messages",
+        "com.brave.Browser": "Brave", "net.battle.app": "Battle.net", "com.mojang.minecraftlauncher": "Minecraft",
+        "com.todesktop.230313mzl4w4u92": "Cursor", "com.tencent.qq": "QQ", "com.tencent.meeting": "Tencent Meeting", "com.microsoft.VSCode": "VS Code", "com.apple.MobileSMS": "Messages",
     ]
 
     /// The value in a readable form: categories without their prefix, bundle

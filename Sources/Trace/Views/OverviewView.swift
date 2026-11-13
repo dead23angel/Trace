@@ -21,9 +21,14 @@ struct OverviewView: View {
                     HourlyCard()
                 }
                 .fixedSize(horizontal: false, vertical: true)
+                GoalsCard()
                 DayLanesCard()
                 HStack(alignment: .top, spacing: 12) {
-                    TopAppsCard().frame(minWidth: 280, maxWidth: 360)
+                    VStack(spacing: 12) {
+                        FocusCard()
+                        TopAppsCard()
+                    }
+                    .frame(minWidth: 300, maxWidth: 400)
                     ActivityCard()
                 }
             }
@@ -162,14 +167,18 @@ private struct HourlyCard: View {
 
 /// The day as two lanes: sessions by tag, and the apps underneath.
 private struct DayLanesCard: View {
-    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject fileprivate var model: AppModel
 
     var body: some View {
         let scale = DayScale(day: model.day, first: model.summary.first, last: model.summary.last)
+        let sound = pieces(.audio, scale)
+        let calls = pieces(.mic, scale)
         Card(padding: EdgeInsets(top: 16, leading: 20, bottom: 18, trailing: 20)) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     SectionTitle(title: L("Timeline"))
+                    Button(L("Open as lanes")) { model.timelineMode = .gantt; model.pane = .timeline }
+                        .buttonStyle(.trLink).font(.system(size: 12))
                     Spacer()
                     Legend(tags: model.summary.byTag.prefix(6).map(\.tag))
                 }
@@ -178,6 +187,8 @@ private struct DayLanesCard: View {
                         Color.clear.frame(height: 14)
                         Text(L("Tag")).frame(height: 26)
                         Text(L("App")).frame(height: 16)
+                        if !sound.isEmpty { Text(L("Sound")).frame(height: 10) }
+                        if !calls.isEmpty { Text(L("Calls")).frame(height: 10) }
                     }
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
@@ -210,9 +221,28 @@ private struct DayLanesCard: View {
                                   tip: "\(run.appName) · \(Fmt.time(run.start)) – \(Fmt.time(run.end))", opacity: 0.5)
                         }, height: 16, radius: 4)
                         .accessibilityLabel(L("Timeline of the day by app"))
+
+                        if !sound.isEmpty {
+                            Lane(pieces: sound, height: 10, radius: 3).accessibilityLabel(L("When sound was playing"))
+                        }
+                        if !calls.isEmpty {
+                            Lane(pieces: calls, height: 10, radius: 3).accessibilityLabel(L("When the microphone was in use"))
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+extension DayLanesCard {
+    /// Background records of one layer as lane pieces.
+    fileprivate func pieces(_ layer: Layer, _ scale: DayScale) -> [Lane.Piece] {
+        model.background.filter { $0.layer == layer.rawValue && $0.duration >= 20 }.enumerated().map { index, event in
+            let start = max(event.start, model.dayInterval.start), end = min(event.end, model.dayInterval.end)
+            return .init(id: index, start: scale.fraction(start), length: scale.length(end.timeIntervalSince(start)),
+                         color: Palette.color(model.tagger.primary(for: event)),
+                         tip: "\(event.appName) · \(Fmt.time(start)) – \(Fmt.time(end))", opacity: 0.45)
         }
     }
 }

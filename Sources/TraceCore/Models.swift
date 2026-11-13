@@ -37,6 +37,8 @@ public struct ActivityEvent: Codable, Identifiable, Equatable, Sendable,
     public var device: String = ""
     /// For events from another Mac: the day file they came from.
     public var syncDay: String?
+    /// 0 for what was in front; see `Layer` for what ran in the background.
+    public var layer: Int = 0
 
     public static let databaseTableName = "event"
 
@@ -69,6 +71,65 @@ public struct ActivityEvent: Codable, Identifiable, Equatable, Sendable,
     }
 }
 
+/// What an event records. Only `front` counts towards tracked time; the
+/// others run alongside it.
+public enum Layer: Int, Sendable, CaseIterable {
+    /// The app and window in front.
+    case front = 0
+    /// An app playing sound, in front or not.
+    case audio = 1
+    /// An app using the microphone: a call or a meeting.
+    case mic = 2
+}
+
+/// How a tag counts when judging focus.
+public enum TagRole: Int, Codable, Sendable, CaseIterable {
+    case neutral = 0
+    /// Work you want long uninterrupted stretches of.
+    case focus = 1
+    /// Time you would rather keep small.
+    case distraction = 2
+
+    /// The role a tag starts with.
+    public static func initial(key: String?) -> TagRole {
+        switch key {
+        case nil, "dev", "study", "design", "office": return .focus
+        case "fun", "games": return .distraction
+        default: return .neutral
+        }
+    }
+}
+
+/// A daily target for a tag: at least, or at most, so many minutes.
+public struct Goal: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public enum Kind: String, Codable, Sendable, CaseIterable { case atLeast, atMost }
+
+    public var id: Int64?
+    public var tagID: Int64
+    public var kind: Kind
+    public var minutes: Int
+
+    public static let databaseTableName = "goal"
+
+    public init(id: Int64? = nil, tagID: Int64, kind: Kind, minutes: Int) {
+        self.id = id
+        self.tagID = tagID
+        self.kind = kind
+        self.minutes = minutes
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
+    public var seconds: TimeInterval { TimeInterval(minutes * 60) }
+
+    /// Whether a day with `spent` seconds on the tag meets the goal.
+    public func isMet(by spent: TimeInterval) -> Bool {
+        kind == .atLeast ? spent >= seconds : spent <= seconds
+    }
+}
+
 /// A label for activity, either a built-in preset (`key` set) or user-defined.
 public struct Tag: Codable, Identifiable, Hashable, Sendable,
     FetchableRecord, MutablePersistableRecord {
@@ -79,17 +140,19 @@ public struct Tag: Codable, Identifiable, Hashable, Sendable,
     public var colorIndex: Int
     public var enabled: Bool
     public var sortOrder: Int
+    public var role: TagRole
 
     public static let databaseTableName = "tag"
 
     public init(id: Int64? = nil, key: String? = nil, name: String,
-                colorIndex: Int, enabled: Bool = true, sortOrder: Int) {
+                colorIndex: Int, enabled: Bool = true, sortOrder: Int, role: TagRole? = nil) {
         self.id = id
         self.key = key
         self.name = name
         self.colorIndex = colorIndex
         self.enabled = enabled
         self.sortOrder = sortOrder
+        self.role = role ?? TagRole.initial(key: key)
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -138,6 +201,13 @@ public struct TaggingSnapshot: Codable, Equatable, Sendable {
         public var enabled: Bool
         public var sortOrder: Int
         public var rules: [RuleEntry]
+        public var role: TagRole?
+        public var goal: GoalEntry?
+    }
+
+    public struct GoalEntry: Codable, Equatable, Sendable {
+        public var kind: Goal.Kind
+        public var minutes: Int
     }
 
     public var updated: Date

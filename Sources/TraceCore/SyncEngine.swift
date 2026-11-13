@@ -37,6 +37,8 @@ public final class SyncEngine {
         var title: String
         var path: String?
         var url: String?
+        /// Absent for what was in front; see `Layer`.
+        var layer: Int?
     }
 
     private let store: EventStore
@@ -124,7 +126,8 @@ public final class SyncEngine {
             let file = events.appendingPathComponent(Self.dayKey(day, calendar: calendar) + ".jsonl")
             let records = try store.localEvents(startingFrom: day, to: next).map {
                 Record(start: $0.start, end: $0.end, bundleID: $0.bundleID, appName: $0.appName,
-                       category: $0.category, title: $0.title, path: $0.path, url: $0.url)
+                       category: $0.category, title: $0.title, path: $0.path, url: $0.url,
+                       layer: $0.layer == 0 ? nil : $0.layer)
             }
             if records.isEmpty {
                 try? fm.removeItem(at: file)
@@ -186,10 +189,12 @@ public final class SyncEngine {
                 guard let data = try? Data(contentsOf: file) else { continue }
                 let records = data.split(separator: 0x0A).compactMap { try? decoder.decode(Record.self, from: Data($0)) }
                 let imported = records.filter { $0.end >= $0.start }.map { record in
-                    ActivityEvent(sample: Sample(bundleID: record.bundleID, appName: record.appName,
-                                                 category: record.category, title: record.title,
-                                                 path: record.path, url: record.url),
-                                  start: record.start, end: record.end)
+                    var event = ActivityEvent(sample: Sample(bundleID: record.bundleID, appName: record.appName,
+                                                             category: record.category, title: record.title,
+                                                             path: record.path, url: record.url),
+                                              start: record.start, end: record.end)
+                    event.layer = record.layer ?? 0
+                    return event
                 }
                 try store.replaceRemote(device: id, day: day, stamp: stamp, with: imported)
                 result.importedDays += 1

@@ -4,8 +4,10 @@ import TraceCore
 extension TimelineMode {
     var title: String {
         switch self {
+        case .gantt: return L("Lanes")
         case .byTag: return L("By tag")
         case .byApp: return L("By app")
+        case .byProject: return L("By project")
         case .records: return L("Records")
         }
     }
@@ -37,12 +39,22 @@ struct TimelineView: View {
                 }
             } else if model.timelineMode == .records {
                 RecordsView(events: events)
+            } else if model.timelineMode == .gantt {
+                GanttCard()
             } else {
                 HStack(alignment: .top, spacing: 12) {
-                    OutlineCard(events: events, mode: model.timelineMode == .byApp ? .byApp : .byTag)
+                    OutlineCard(events: events, mode: treeMode)
                     DayColumnCard().frame(width: 360)
                 }
             }
+        }
+    }
+
+    private var treeMode: TreeMode {
+        switch model.timelineMode {
+        case .byApp: return .byApp
+        case .byProject: return .byProject
+        default: return .byTag
         }
     }
 
@@ -73,7 +85,7 @@ private struct OutlineCard: View {
 
     var body: some View {
         let interval = model.selection ?? model.dayInterval
-        let nodes = Analyzer.tree(events, in: interval, tagger: model.tagger, mode: mode)
+        let nodes = Analyzer.tree(events, in: interval, tagger: model.tagger, mode: mode, projects: model.projects)
         let total = nodes.reduce(0) { $0 + $1.seconds }
         let peak = nodes.map(\.seconds).max() ?? 1
         Card(padding: EdgeInsets(top: 16, leading: 12, bottom: 12, trailing: 12)) {
@@ -98,8 +110,7 @@ private struct OutlineCard: View {
                         .help(L("Show the whole day"))
                     }
                     Spacer()
-                    Text(mode == .byTag ? L("Expand level by level: tag › app › file or site › page")
-                                        : L("Expand level by level: app › file or site › page"))
+                    Text(hint)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.muted)
                         .lineLimit(1)
@@ -107,13 +118,23 @@ private struct OutlineCard: View {
                 .padding(EdgeInsets(top: 0, leading: 8, bottom: 10, trailing: 8))
 
                 if nodes.isEmpty {
-                    Text(L("No matching records")).foregroundStyle(Theme.muted).padding(8)
+                    Text(mode == .byProject ? L("No files were open in this period, so there are no projects to show.")
+                                            : L("No matching records"))
+                        .foregroundStyle(Theme.muted).padding(8)
                 }
                 ForEach(flatten(nodes, level: 0)) { row in
                     OutlineRow(node: row.node, level: row.level, isOpen: row.isOpen,
                                fraction: row.node.seconds / peak) { toggle(row) }
                 }
             }
+        }
+    }
+
+    private var hint: String {
+        switch mode {
+        case .byTag: return L("Expand level by level: tag › app › file or site › page")
+        case .byApp: return L("Expand level by level: app › file or site › page")
+        case .byProject: return L("Projects are found from the folder each file is in")
         }
     }
 
@@ -190,6 +211,8 @@ private struct OutlineRow: View {
         case .web: glyph("globe")
         case .page: glyph("doc.text")
         case .window: glyph("macwindow")
+        case .project:
+            Image(systemName: "folder.fill").font(.system(size: 12)).foregroundStyle(Palette.color(node.tag)).frame(width: 14)
         }
     }
 

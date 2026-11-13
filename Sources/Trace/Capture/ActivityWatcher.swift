@@ -25,6 +25,11 @@ final class ActivityWatcher: ObservableObject {
     var captureTitles = true
     var captureFiles = true
     var captureURLs = true
+    /// Whether to record which apps play sound or use the microphone.
+    var captureBackground = true
+    /// Apps heard or on a call at the last sample.
+    @Published private(set) var background: Set<AudioMonitor.Activity> = []
+    private var audible: Set<String> = []
     private var resume: Timer?
 
     private let store: EventStore
@@ -86,9 +91,14 @@ final class ActivityWatcher: ObservableObject {
         guard !isPaused, !busy else { return }
 
         let now = Date()
+        let front = NSWorkspace.shared.frontmostApplication
         let anyInput = CGEventType(rawValue: ~0)!
         let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
-        if idleSeconds >= idleThreshold {
+        // Watching a video or sitting in a call is not being away: as long as
+        // the app in front is making sound, the time counts.
+        let listening = front?.bundleIdentifier.map(audible.contains) ?? false
+        sampleBackground(at: now)
+        if idleSeconds >= idleThreshold && !listening {
             if !isIdle {
                 isIdle = true
                 current = nil
@@ -100,7 +110,7 @@ final class ActivityWatcher: ObservableObject {
         }
         if isIdle { isIdle = false }
 
-        guard let app = NSWorkspace.shared.frontmostApplication,
+        guard let app = front,
               let bundleID = app.bundleIdentifier,
               !Self.ignored.contains(bundleID),
               bundleID != Bundle.main.bundleIdentifier else { return }
@@ -130,6 +140,25 @@ final class ActivityWatcher: ObservableObject {
                 self.current = sample
                 self.lastWindow = (pid, window)
                 self.busy = false
+            }
+        }
+    }
+
+    /// Notes which apps are playing sound or using the microphone. Runs on
+    /// the watcher's queue; the result is used at the next sample.
+    private func sampleBackground(at now: Date) {
+        guard captureBackground else {
+            if !background.isEmpty { background = [] }
+            audible = []
+            return
+        }
+        let (excluded, pulse) = (excluded, Self.interval * 5)
+        queue.async { [store] in
+            let active = AudioMonitor.current().filter { !excluded.contains($0.bundleID) }
+            try? store.backgroundHeartbeat(active.map { ($0.bundleID, $0.appName, $0.layer) }, at: now, pulse: pulse)
+            DispatchQueue.main.async {
+                if self.background != active { self.background = active }
+                self.audible = Set(active.filter { $0.layer == .audio }.map(\.bundleID))
             }
         }
     }

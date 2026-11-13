@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Lanes**: the day as a Gantt-style chart, one lane per tag or app, with sound, calls and each Mac underneath.
+- **Sound and calls**: Trace notes which apps play sound or use the microphone, also in the background. While the app in front is making sound you are no longer counted as away.
+- **Focus**: deep work time, app switches per hour and what interrupted you, on the overview. Each tag counts as focus, neutral or distraction.
+- **Goals**: a daily target or limit per tag, shown as rings with streaks.
+- **Projects**: time per project, found from the folder each file is in.
+- **Review**: a few sentences on each week and month compared with the one before.
+- **Year calendar**: one square per day; click a day to open it.
+
 - **Sync folder** (optional, off by default): keep several Macs in step, or keep a backup, through any folder that is synced for you, such as iCloud Drive. Each Mac writes its own records and reads the others'; tags and rules are shared. A menu in the sidebar shows all Macs together or one at a time. Macs can be named, reports show time per Mac, and simultaneous use on two Macs is drawn side by side.
 - **Wider built-in tags**: about 180 more common apps and sites are recognised out of the box, including QQ, WeCom, DingTalk, Feishu, Tencent Meeting, NetEase Cloud Music, JetBrains IDEs, Zotero, Obsidian, Notion and Adobe apps. Existing installs receive the additions once.
 

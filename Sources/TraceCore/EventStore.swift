@@ -87,6 +87,21 @@ public final class EventStore: @unchecked Sendable {
         migrator.registerMigration("v4") { db in
             try db.alter(table: "device") { t in t.add(column: "alias", .text) }
         }
+        migrator.registerMigration("v5") { db in
+            try db.alter(table: "event") { t in t.add(column: "layer", .integer).notNull().defaults(to: 0) }
+            try db.alter(table: "tag") { t in t.add(column: "role", .integer).notNull().defaults(to: 0) }
+            for key in ["dev", "study", "design", "office"] {
+                try db.execute(sql: "UPDATE tag SET role = 1 WHERE key = ?", arguments: [key])
+            }
+            try db.execute(sql: "UPDATE tag SET role = 1 WHERE key IS NULL")
+            try db.execute(sql: "UPDATE tag SET role = 2 WHERE key IN ('fun', 'games')")
+            try db.create(table: "goal") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("tagID", .integer).notNull().unique().references("tag", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("minutes", .integer).notNull()
+            }
+        }
         try migrator.migrate(db)
         try seedPresetsIfNeeded()
         try addNewPresetRules()
@@ -102,7 +117,8 @@ public final class EventStore: @unchecked Sendable {
     @discardableResult
     public func heartbeat(_ sample: Sample, at now: Date, pulse: TimeInterval = 15) throws -> ActivityEvent {
         try db.write { db in
-            if var last = try ActivityEvent.filter(Column("device") == "").order(Column("id").desc).fetchOne(db),
+            if var last = try ActivityEvent.filter(Column("device") == "" && Column("layer") == 0)
+                .order(Column("id").desc).fetchOne(db),
                last.matches(sample),
                now >= last.end,
                now.timeIntervalSince(last.end) <= pulse {
@@ -120,7 +136,8 @@ public final class EventStore: @unchecked Sendable {
     /// have been idle since then.
     public func trimLast(to date: Date) throws {
         try db.write { db in
-            guard var last = try ActivityEvent.filter(Column("device") == "").order(Column("id").desc).fetchOne(db),
+            guard var last = try ActivityEvent.filter(Column("device") == "" && Column("layer") == 0)
+                .order(Column("id").desc).fetchOne(db),
                   last.end > date else { return }
             last.end = max(last.start, date)
             try last.update(db)
@@ -131,9 +148,41 @@ public final class EventStore: @unchecked Sendable {
     public func events(from: Date, to: Date) throws -> [ActivityEvent] {
         try db.read { db in
             try ActivityEvent
-                .filter(Column("end") > from && Column("start") < to)
+                .filter(Column("layer") == 0 && Column("end") > from && Column("start") < to)
                 .order(Column("start"))
                 .fetchAll(db)
+        }
+    }
+
+    /// What ran in the background (sound, microphone) overlapping `[from, to)`.
+    public func background(from: Date, to: Date) throws -> [ActivityEvent] {
+        try db.read { db in
+            try ActivityEvent
+                .filter(Column("layer") > 0 && Column("end") > from && Column("start") < to)
+                .order(Column("start"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Records that these apps were playing sound or using the microphone
+    /// at `now`. Works like `heartbeat`, one running record per app and layer.
+    public func backgroundHeartbeat(_ active: [(bundleID: String, appName: String, layer: Layer)],
+                                    at now: Date, pulse: TimeInterval = 15) throws {
+        guard !active.isEmpty else { return }
+        try db.write { db in
+            for item in active where item.layer != .front {
+                if var last = try ActivityEvent
+                    .filter(Column("device") == "" && Column("layer") == item.layer.rawValue && Column("bundleID") == item.bundleID)
+                    .order(Column("id").desc).fetchOne(db),
+                   now >= last.end, now.timeIntervalSince(last.end) <= pulse {
+                    last.end = now
+                    try last.update(db)
+                } else {
+                    var event = ActivityEvent(sample: Sample(bundleID: item.bundleID, appName: item.appName), start: now, end: now)
+                    event.layer = item.layer.rawValue
+                    try event.insert(db)
+                }
+            }
         }
     }
 
@@ -159,7 +208,7 @@ public final class EventStore: @unchecked Sendable {
     }
 
     public func eventCount() throws -> Int {
-        try db.read { db in try ActivityEvent.fetchCount(db) }
+        try db.read { db in try ActivityEvent.filter(Column("layer") == 0).fetchCount(db) }
     }
 
     // MARK: Tags and rules
@@ -240,6 +289,38 @@ public final class EventStore: @unchecked Sendable {
                 tag.sortOrder = order
                 try tag.update(db)
             }
+            try Self.touchTagging(db)
+        }
+    }
+
+    public func setTagRole(id: Int64, role: TagRole) throws {
+        try db.write { db in
+            guard var tag = try Tag.fetchOne(db, key: id) else { return }
+            tag.role = role
+            try tag.update(db)
+            try Self.touchTagging(db)
+        }
+    }
+
+    // MARK: Goals
+
+    public func goals() throws -> [Goal] {
+        try db.read { db in try Goal.order(Column("id")).fetchAll(db) }
+    }
+
+    /// Sets the daily goal of a tag, replacing any it had.
+    public func setGoal(tagID: Int64, kind: Goal.Kind, minutes: Int) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM goal WHERE tagID = ?", arguments: [tagID])
+            var goal = Goal(tagID: tagID, kind: kind, minutes: max(1, minutes))
+            try goal.insert(db)
+            try Self.touchTagging(db)
+        }
+    }
+
+    public func removeGoal(tagID: Int64) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM goal WHERE tagID = ?", arguments: [tagID])
             try Self.touchTagging(db)
         }
     }
@@ -389,10 +470,13 @@ public final class EventStore: @unchecked Sendable {
         try db.read { db in
             guard let raw = try Self.meta(db, "taggingUpdated"), let seconds = Double(raw) else { return nil }
             let rules = Dictionary(grouping: try Rule.order(Column("id")).fetchAll(db), by: \.tagID)
+            let goals = Dictionary(uniqueKeysWithValues: try Goal.fetchAll(db).map { ($0.tagID, $0) })
             let tags = try Tag.order(Column("sortOrder"), Column("id")).fetchAll(db).map { tag in
                 TaggingSnapshot.TagEntry(key: tag.key, name: tag.name, colorIndex: tag.colorIndex, enabled: tag.enabled,
                                          sortOrder: tag.sortOrder,
-                                         rules: (rules[tag.id ?? 0] ?? []).map { .init(field: $0.field, op: $0.op, value: $0.value) })
+                                         rules: (rules[tag.id ?? 0] ?? []).map { .init(field: $0.field, op: $0.op, value: $0.value) },
+                                         role: tag.role,
+                                         goal: goals[tag.id ?? 0].map { .init(kind: $0.kind, minutes: $0.minutes) })
             }
             return TaggingSnapshot(updated: Date(timeIntervalSince1970: seconds), tags: tags)
         }
@@ -414,8 +498,14 @@ public final class EventStore: @unchecked Sendable {
                 tag.colorIndex = entry.colorIndex
                 tag.enabled = entry.enabled
                 tag.sortOrder = entry.sortOrder
+                if let role = entry.role { tag.role = role }
                 try tag.save(db)
                 guard let tagID = tag.id else { continue }
+                try db.execute(sql: "DELETE FROM goal WHERE tagID = ?", arguments: [tagID])
+                if let goal = entry.goal {
+                    var record = Goal(tagID: tagID, kind: goal.kind, minutes: goal.minutes)
+                    try record.insert(db)
+                }
                 try db.execute(sql: "DELETE FROM rule WHERE tagID = ?", arguments: [tagID])
                 for rule in entry.rules {
                     var record = Rule(tagID: tagID, field: rule.field, op: rule.op, value: rule.value)

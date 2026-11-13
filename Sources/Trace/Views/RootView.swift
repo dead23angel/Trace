@@ -213,6 +213,17 @@ struct RecordingStatus: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                if !watcher.isPaused, !watcher.background.isEmpty {
+                    // What is heard or on a call right now, in front or not.
+                    HStack(spacing: 4) {
+                        Image(systemName: watcher.background.contains { $0.layer == .mic } ? "phone.fill" : "speaker.wave.2.fill")
+                            .font(.system(size: 8))
+                        Text(Set(watcher.background.map(\.appName)).sorted().joined(separator: L(", ")))
+                            .lineLimit(1)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.accent)
+                }
             }
             Spacer(minLength: 4)
             IconButton(symbol: watcher.isPaused ? "play.fill" : "pause.fill",

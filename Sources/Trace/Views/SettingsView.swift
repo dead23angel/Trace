@@ -110,8 +110,11 @@ struct SettingsView: View {
         row(L("File paths"), L("The file open in document-based apps")) {
             Toggle(L("File paths"), isOn: $model.captureFiles).toggleStyle(.switch).labelsHidden()
         }
-        row(L("Web addresses"), L("The page address in browsers, stored without the query string"), last: true) {
+        row(L("Web addresses"), L("The page address in browsers, stored without the query string")) {
             Toggle(L("Web addresses"), isOn: $model.captureURLs).toggleStyle(.switch).labelsHidden()
+        }
+        row(L("Sound and calls"), L("Which apps are playing sound or using the microphone, also in the background. Not what is played or said."), last: true) {
+            Toggle(L("Sound and calls"), isOn: $model.captureBackground).toggleStyle(.switch).labelsHidden()
         }
         Text(L("The app in front and how long you stay are always recorded. Keystrokes and screen contents never are."))
             .font(.system(size: 12))

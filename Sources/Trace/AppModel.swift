@@ -16,7 +16,7 @@ enum Pane: String, CaseIterable, Identifiable {
 }
 
 enum TimelineMode: String, CaseIterable, Identifiable {
-    case byTag, byApp, records
+    case gantt, byTag, byApp, byProject, records
     var id: String { rawValue }
 }
 
@@ -44,7 +44,7 @@ final class AppModel: ObservableObject {
 
     // Navigation and selection, shared so one page can send you to another.
     @Published var pane: Pane = .overview
-    @Published var timelineMode: TimelineMode = .byTag
+    @Published var timelineMode: TimelineMode = .gantt
     @Published var query = ""
     @Published var tagFilter: Int64?
     /// A stretch of the day picked in the timeline; the outline sums only this.
@@ -64,6 +64,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var summary = DaySummary()
     @Published private(set) var blocks: [Block] = []
     @Published private(set) var appRuns: [AppRun] = []
+    /// Sound and microphone records of the selected day.
+    @Published private(set) var background: [ActivityEvent] = []
+    @Published private(set) var focus = FocusSummary()
+    @Published private(set) var goals: [Goal] = []
+    /// Days in a row each goal has been met, keyed by goal id.
+    @Published private(set) var streaks: [Int64: Int] = [:]
+    let projects = ProjectResolver()
     @Published private(set) var yesterdayTotal: TimeInterval = 0
     @Published private(set) var tags: [Tag] = []
     @Published private(set) var rules: [Rule] = []
@@ -85,6 +92,9 @@ final class AppModel: ObservableObject {
     }
     @Published var captureFiles: Bool {
         didSet { UserDefaults.standard.set(captureFiles, forKey: "captureFiles"); watcher.captureFiles = captureFiles }
+    }
+    @Published var captureBackground: Bool {
+        didSet { UserDefaults.standard.set(captureBackground, forKey: "captureBackground"); watcher.captureBackground = captureBackground }
     }
     @Published var captureURLs: Bool {
         didSet { UserDefaults.standard.set(captureURLs, forKey: "captureURLs"); watcher.captureURLs = captureURLs }
@@ -124,7 +134,8 @@ final class AppModel: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
-        defaults.register(defaults: ["captureTitles": true, "captureFiles": true, "captureURLs": true])
+        defaults.register(defaults: ["captureTitles": true, "captureFiles": true, "captureURLs": true,
+                                     "captureBackground": true])
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         language = AppLanguage(rawValue: defaults.string(forKey: "language") ?? "") ?? .system
         let minutes = defaults.integer(forKey: "idleMinutes")
@@ -132,6 +143,7 @@ final class AppModel: ObservableObject {
         captureTitles = defaults.bool(forKey: "captureTitles")
         captureFiles = defaults.bool(forKey: "captureFiles")
         captureURLs = defaults.bool(forKey: "captureURLs")
+        captureBackground = defaults.bool(forKey: "captureBackground")
         excludedApps = defaults.stringArray(forKey: "excludedApps") ?? []
         if let id = defaults.string(forKey: "deviceID") {
             deviceID = id
@@ -180,12 +192,20 @@ final class AppModel: ObservableObject {
         watcher.captureTitles = captureTitles
         watcher.captureFiles = captureFiles
         watcher.captureURLs = captureURLs
+        watcher.captureBackground = captureBackground
         watcher.excluded = Set(excludedApps)
 
         L10n.apply(language)
         if demo {
-            try? store.insert(DemoData.events())
-            if let last = (try? store.events(from: Date().addingTimeInterval(-86_400), to: Date()))?.last {
+            // Always a full day, whatever the clock says, so the demo never looks empty.
+            let evening = Calendar.current.startOfDay(for: Date()).addingTimeInterval(21 * 3600)
+            try? store.insert(DemoData.events(now: evening, days: 400) + DemoData.background(now: evening))
+            if let tags = try? store.tags() {
+                if let dev = tags.first(where: { $0.key == "dev" })?.id { try? store.setGoal(tagID: dev, kind: .atLeast, minutes: 240) }
+                if let study = tags.first(where: { $0.key == "study" })?.id { try? store.setGoal(tagID: study, kind: .atLeast, minutes: 60) }
+                if let fun = tags.first(where: { $0.key == "fun" })?.id { try? store.setGoal(tagID: fun, kind: .atMost, minutes: 45) }
+            }
+            if let last = (try? store.events(from: evening.addingTimeInterval(-86_400), to: evening))?.last {
                 watcher.showDemo(Sample(bundleID: last.bundleID, appName: last.appName, title: last.title,
                                         path: last.path, url: last.url), since: last.start)
             }
@@ -254,10 +274,52 @@ final class AppModel: ObservableObject {
         summary = Analyzer.summarize(events, in: interval, tagger: tagger)
         blocks = Analyzer.blocks(events, in: interval, tagger: tagger)
         appRuns = Analyzer.appRuns(events, in: interval, tagger: tagger)
+        background = ((try? store.background(from: interval.start, to: interval.end)) ?? [])
+            .filter { deviceFilter == nil || $0.device == deviceFilter }
+        focus = Analyzer.focus(events, in: interval, tagger: tagger)
+        goals = (try? store.goals()) ?? []
+        reloadStreaks()
         if let before = Calendar.current.date(byAdding: .day, value: -1, to: day) {
             let previous = DateInterval(start: before, end: day)
             yesterdayTotal = events(in: previous).reduce(0) { $0 + (Analyzer.clipped($1, to: previous)) }
         }
+    }
+
+    private var streaksKey = ""
+
+    /// Streaks look back a month, so they are recomputed only when the day
+    /// or the goals change.
+    private func reloadStreaks() {
+        let key = "\(day.timeIntervalSince1970)-\(revision)-\(goals.count)-\(deviceFilter ?? "*")"
+        guard key != streaksKey else { return }
+        streaksKey = key
+        guard !goals.isEmpty, let from = Calendar.current.date(byAdding: .day, value: -60, to: day) else {
+            streaks = [:]
+            return
+        }
+        // Up to yesterday: today is added from the live summary by the view.
+        let range = DateInterval(start: from, end: day)
+        let days = Analyzer.report(events(in: range), in: range, tagger: tagger).days
+        var result: [Int64: Int] = [:]
+        for goal in goals {
+            guard let id = goal.id, let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: day) else { continue }
+            result[id] = Analyzer.streak(for: goal, days: days, today: yesterday)
+        }
+        streaks = result
+    }
+
+    /// Days in a row the goal has been met, counting today once it is met.
+    func streak(for goal: Goal) -> Int {
+        let before = streaks[goal.id ?? 0] ?? 0
+        let spent = summary.byTag.first { $0.tag?.id == goal.tagID }?.seconds ?? 0
+        // "At most" is only settled when the day is over.
+        let metToday = goal.kind == .atLeast ? goal.isMet(by: spent) : (!isToday && summary.total > 0 && goal.isMet(by: spent))
+        return before + (metToday ? 1 : 0)
+    }
+
+    func gantt(_ grouping: GanttGrouping) -> Gantt {
+        Analyzer.gantt(events.filter(passesFilter), background: background, in: dayInterval, tagger: tagger,
+                       grouping: grouping, deviceName: { [weak self] in self?.deviceName(forDevice: $0) ?? $0 })
     }
 
     private func reloadIfToday() {
@@ -335,6 +397,24 @@ final class AppModel: ObservableObject {
         changed()
     }
 
+    func setRole(_ role: TagRole, for tag: Tag) {
+        guard let id = tag.id else { return }
+        try? store.setTagRole(id: id, role: role)
+        changed()
+    }
+
+    func setGoal(for tag: Tag, kind: Goal.Kind, minutes: Int) {
+        guard let id = tag.id else { return }
+        try? store.setGoal(tagID: id, kind: kind, minutes: minutes)
+        changed()
+    }
+
+    func removeGoal(for tag: Tag) {
+        guard let id = tag.id else { return }
+        try? store.removeGoal(tagID: id)
+        changed()
+    }
+
     func addRule(to tag: Tag, field: RuleField, op: RuleOp, value: String) {
         guard let id = tag.id else { return }
         _ = try? store.addRule(tagID: id, field: field, op: op, value: value)
@@ -382,7 +462,12 @@ final class AppModel: ObservableObject {
     // MARK: Reports and export
 
     func report(for range: DateInterval) -> RangeReport {
-        Analyzer.report(events(in: range), in: range, tagger: tagger)
+        Analyzer.report(events(in: range), in: range, tagger: tagger, projects: projects)
+    }
+
+    func review(for range: DateInterval, previous: DateInterval) -> PeriodReview {
+        Analyzer.review(events(in: range), in: range, previous: events(in: previous), in: previous,
+                        tagger: tagger, projects: projects)
     }
 
     /// Asks where to save, then writes every record in `range` as CSV.

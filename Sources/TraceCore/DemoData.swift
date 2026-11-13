@@ -43,11 +43,11 @@ public enum DemoData {
                                                      "https://developer.apple.com/documentation/applicationservices/axuielement"))],
             [Stay(from: 840, to: 900, sample: app("us.zoom.xos", "zoom.us", title: "Weekly sync"))],
             [Stay(from: 900, to: 962, sample: app("com.microsoft.Word", "Microsoft Word", title: "Design notes.docx",
-                                                  path: "\(home)/Documents/Trace/Design notes.docx")),
+                                                  path: "\(home)/Documents/Handbook/Design notes.docx")),
              Stay(from: 962, to: 975, sample: app("com.apple.Notes", "Notes", "public.app-category.productivity",
                                                   title: "Release checklist")),
              Stay(from: 975, to: 1010, sample: app("com.microsoft.Word", "Microsoft Word", title: "Design notes.docx",
-                                                   path: "\(home)/Documents/Trace/Design notes.docx"))],
+                                                   path: "\(home)/Documents/Handbook/Design notes.docx"))],
             [Stay(from: 1010, to: 1030, sample: app("com.apple.mail", "Mail", title: "Re: Release plan"))],
             [Stay(from: 1030, to: 1090, sample: xcode("TimelineView.swift", "Sources/Trace/Views")),
              Stay(from: 1090, to: 1100, sample: terminal),
@@ -55,6 +55,36 @@ public enum DemoData {
             [Stay(from: 1150, to: 1185, sample: safari("Platforms State of the Union",
                                                        "https://www.youtube.com/watch"))],
         ]
+    }
+
+    /// Sound and calls that ran alongside, as (from, to, bundle id, app, layer).
+    private static let alongside: [(Int, Int, String, String, Layer)] = [
+        (525, 612, "com.apple.Music", "Music", .audio),
+        (642, 722, "com.apple.Music", "Music", .audio),
+        (840, 900, "us.zoom.xos", "zoom.us", .mic),
+        (840, 900, "us.zoom.xos", "zoom.us", .audio),
+        (1032, 1112, "com.apple.Music", "Music", .audio),
+        (1150, 1185, "com.apple.Safari", "Safari", .audio),
+    ]
+
+    /// Background records to go with `events`, generated the same way.
+    public static func background(now: Date = Date(), days: Int = 28, calendar: Calendar = .current) -> [ActivityEvent] {
+        let today = calendar.startOfDay(for: now)
+        var events: [ActivityEvent] = []
+        for back in stride(from: days - 1, through: 0, by: -1) {
+            guard let start = calendar.date(byAdding: .day, value: -back, to: today),
+                  back == 0 || !calendar.isDateInWeekend(start) else { continue }
+            let shift = back == 0 ? 0 : (back * 37) % 41 - 20
+            for (index, item) in alongside.enumerated() where back == 0 || (back + index) % 4 != 0 {
+                let from = start.addingTimeInterval(TimeInterval((item.0 + shift) * 60))
+                let to = min(start.addingTimeInterval(TimeInterval((item.1 + shift) * 60)), now)
+                guard to > from else { continue }
+                var event = ActivityEvent(sample: Sample(bundleID: item.2, appName: item.3), start: from, end: to)
+                event.layer = item.4.rawValue
+                events.append(event)
+            }
+        }
+        return events
     }
 
     /// Events for the `days` days up to and including the day of `now`.

@@ -20,9 +20,17 @@ enum Screenshots {
 
         let shots: [Shot] = [
             Shot(name: "overview") { $0.pane = .overview },
+            Shot(name: "lanes") { model in
+                model.pane = .timeline
+                model.timelineMode = .gantt
+            },
             Shot(name: "timeline") { model in
                 model.pane = .timeline
                 model.timelineMode = .byTag
+            },
+            Shot(name: "projects") { model in
+                model.pane = .timeline
+                model.timelineMode = .byProject
             },
             Shot(name: "records") { model in
                 // Open the session with the documentation page and select it.
@@ -32,6 +40,7 @@ enum Screenshots {
                 }?.start, event: event?.id)
             },
             Shot(name: "reports") { $0.showReport(.week) },
+            Shot(name: "year") { $0.showReport(.year) },
             Shot(name: "tags") { $0.pane = .tags },
             Shot(name: "rules") { $0.pane = .rules },
             Shot(name: "overview-dark") { model in
@@ -55,7 +64,7 @@ enum Screenshots {
             window.center()
             for shot in shots {
                 shot.prepare(model)
-                try? await Task.sleep(for: .seconds(1.2))
+                try? await Task.sleep(for: .seconds(1.6))
                 if let data = capture(window) {
                     try? data.write(to: folder.appendingPathComponent("\(shot.name).png"))
                 }

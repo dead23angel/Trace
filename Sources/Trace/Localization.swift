@@ -48,6 +48,12 @@ enum Fmt {
         return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 
+    /// Whole hours, for where there is little room: "180h".
+    static func hours(_ seconds: TimeInterval) -> String {
+        let h = Int((seconds / 3600).rounded())
+        return L10n.isChinese ? "\(h)小时" : "\(h)h"
+    }
+
     /// "1 record", "5 records".
     static func records(_ count: Int) -> String {
         count == 1 ? L("1 record") : String(format: L("%d records"), count)

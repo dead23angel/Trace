@@ -482,4 +482,184 @@ final class TraceCoreTests: XCTestCase {
             }
         }
     }
+
+    // MARK: Background, Gantt, focus, goals, projects, review
+
+    private func mail(_ title: String = "Inbox") -> Sample {
+        Sample(bundleID: "com.apple.mail", appName: "Mail", title: title)
+    }
+
+    private func event(_ sample: Sample, _ from: TimeInterval, _ to: TimeInterval, device: String = "") -> ActivityEvent {
+        var e = ActivityEvent(sample: sample, start: t0 + from, end: t0 + to)
+        e.device = device
+        return e
+    }
+
+    func testBackgroundActivityIsKeptApartFromTrackedTime() throws {
+        let store = try EventStore()
+        let music = (bundleID: "com.apple.Music", appName: "Music", layer: Layer.audio)
+        let call = (bundleID: "us.zoom.xos", appName: "zoom.us", layer: Layer.mic)
+        try store.heartbeat(xcode("A.swift"), at: t0)
+        try store.backgroundHeartbeat([music], at: t0)
+        try store.backgroundHeartbeat([music, call], at: t0 + 10)
+        try store.heartbeat(xcode("A.swift"), at: t0 + 10)
+        try store.backgroundHeartbeat([music], at: t0 + 20)
+        try store.backgroundHeartbeat([music], at: t0 + 600)   // after a pause: a new record
+
+        let front = try store.events(from: t0 - 1, to: t0 + 1000)
+        XCTAssertEqual(front.count, 1)
+        XCTAssertEqual(front[0].duration, 10, accuracy: 0.001)
+        XCTAssertEqual(try store.eventCount(), 1)
+
+        let background = try store.background(from: t0 - 1, to: t0 + 1000)
+        XCTAssertEqual(background.map(\.layer), [1, 2, 1])
+        XCTAssertEqual(background[0].duration, 20, accuracy: 0.001)
+
+        // It travels through sync with its layer.
+        let folder = try tempFolder()
+        let other = try EventStore()
+        _ = try SyncEngine(store: store, folder: folder, deviceID: "a", deviceName: "A", calendar: utc).sync(now: t0 + 700)
+        _ = try SyncEngine(store: other, folder: folder, deviceID: "b", deviceName: "B", calendar: utc).sync(now: t0 + 700)
+        XCTAssertEqual(try other.events(from: t0 - 1, to: t0 + 1000).count, 1)
+        XCTAssertEqual(try other.background(from: t0 - 1, to: t0 + 1000).map(\.layer), [1, 2, 1])
+    }
+
+    func testGanttBuildsLanesForTagsAppsSoundAndMacs() throws {
+        let store = try EventStore()
+        let tagger = try store.tagger()
+        let day = DateInterval(start: t0 - 10, duration: 86_400)
+        var song = event(Sample(bundleID: "com.apple.Music", appName: "Music"), 0, 1500)
+        song.layer = Layer.audio.rawValue
+        var song2 = event(Sample(bundleID: "com.spotify.client", appName: "Spotify"), 1000, 2000)
+        song2.layer = Layer.audio.rawValue
+        let events = [event(xcode("A.swift"), 0, 600), event(mail(), 600, 700), event(xcode("B.swift"), 700, 1800),
+                      event(mail(), 900, 1200, device: "mac-b")]
+
+        let byTag = Analyzer.gantt(events, background: [song, song2], in: day, tagger: tagger, grouping: .tag,
+                                   deviceName: { $0.isEmpty ? "Here" : "There" })
+        XCTAssertEqual(byTag.rows.map { $0.tag?.key }, ["dev", "comm"])
+        XCTAssertEqual(byTag.rows[0].seconds, 1700, accuracy: 0.001)
+        XCTAssertEqual(byTag.rows[0].bars.count, 2)                 // the mail break splits the lane
+        XCTAssertEqual(byTag.background.map(\.kind), [.audio])
+        XCTAssertEqual(byTag.background[0].bars.map(\.label), ["Music", "Spotify"])
+        XCTAssertEqual(byTag.background[0].seconds, 2000, accuracy: 0.001)   // the overlap counts once
+        XCTAssertEqual(byTag.devices.map(\.label), ["Here", "There"])
+
+        let byApp = Analyzer.gantt(events, in: day, tagger: tagger, grouping: .app)
+        XCTAssertEqual(byApp.rows.map(\.label), ["Xcode", "Mail"])
+        XCTAssertTrue(byApp.background.isEmpty)
+    }
+
+    func testFocusCountsDeepWorkSwitchesAndInterrupters() throws {
+        let store = try EventStore()
+        let tagger = try store.tagger()
+        let day = DateInterval(start: t0 - 10, duration: 86_400)
+        let video = Sample(bundleID: "com.apple.Safari", appName: "Safari", title: "Video", url: "https://www.youtube.com/watch")
+        let events = [
+            event(xcode("A.swift"), 0, 1200),          // 20 min
+            event(mail(), 1200, 1230),                 // 30 s glance: does not break the session
+            event(xcode("A.swift"), 1230, 2400),       // session of 40 min in all
+            event(mail(), 2400, 3000),                 // 10 min of mail
+            event(xcode("B.swift"), 3000, 3600),       // 10 min: too short to be deep work
+            event(video, 3600, 4200),
+        ]
+        let focus = Analyzer.focus(events, in: day, tagger: tagger, calendar: utc)
+        XCTAssertEqual(focus.deepCount, 1)
+        XCTAssertEqual(focus.deepSeconds, 2400, accuracy: 0.001)
+        XCTAssertEqual(focus.focusSeconds, 2970, accuracy: 0.001)
+        XCTAssertEqual(focus.distractionSeconds, 600, accuracy: 0.001)
+        XCTAssertEqual(focus.switches, 5)
+        XCTAssertEqual(focus.interrupters.map(\.appName), ["Mail", "Safari"])
+        XCTAssertEqual(focus.interrupters.first?.count, 2)
+        XCTAssertEqual(focus.deepShare, 2400.0 / 4200, accuracy: 0.001)
+    }
+
+    func testGoalsAreStoredSyncedAndStreaksCounted() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        let dev = try XCTUnwrap(a.tags().first { $0.key == "dev" })
+        XCTAssertEqual(dev.role, .focus)
+        XCTAssertEqual(try a.tags().first { $0.key == "fun" }?.role, .distraction)
+        XCTAssertEqual(try a.tags().first { $0.key == "comm" }?.role, .neutral)
+
+        try a.setGoal(tagID: dev.id!, kind: .atLeast, minutes: 240)
+        try a.setGoal(tagID: dev.id!, kind: .atLeast, minutes: 120)   // replaces the first
+        try a.setTagRole(id: dev.id!, role: .neutral)
+        XCTAssertEqual(try a.goals().map(\.minutes), [120])
+        _ = try SyncEngine(store: a, folder: folder, deviceID: "a", deviceName: "A", calendar: utc).sync(now: t0)
+        _ = try SyncEngine(store: b, folder: folder, deviceID: "b", deviceName: "B", calendar: utc).sync(now: t0)
+        let devB = try XCTUnwrap(b.tags().first { $0.key == "dev" })
+        XCTAssertEqual(devB.role, .neutral)
+        XCTAssertEqual(try b.goals().first?.tagID, devB.id)
+        XCTAssertEqual(try b.goals().first?.minutes, 120)
+
+        let goal = try XCTUnwrap(a.goals().first)
+        XCTAssertTrue(goal.isMet(by: 7200))
+        XCTAssertFalse(goal.isMet(by: 7199))
+        let today = utc.startOfDay(for: t0)
+        func dayTotal(_ back: Int, _ hours: Double) -> DayTotal {
+            DayTotal(day: today - TimeInterval(back * 86_400), total: hours * 3600,
+                     byTag: [TagTotal(tag: dev, seconds: hours * 3600)])
+        }
+        // Today not there yet, three good days before it, then a miss.
+        let days = [dayTotal(0, 1), dayTotal(1, 3), dayTotal(2, 2), dayTotal(3, 2.5), dayTotal(4, 1), dayTotal(5, 4)]
+        XCTAssertEqual(Analyzer.streak(for: goal, days: days, today: t0, calendar: utc), 3)
+        XCTAssertEqual(Analyzer.streak(for: goal, days: [dayTotal(0, 2)] + days.dropFirst(), today: t0, calendar: utc), 4)
+
+        try a.removeGoal(tagID: dev.id!)
+        XCTAssertTrue(try a.goals().isEmpty)
+    }
+
+    func testProjectsAreFoundFromMarkersAndFolders() throws {
+        let onDisk: Set<String> = ["/Users/me/code/app/Sources/UI", "/Users/me/code/app/.git", "/Users/me/Documents/Thesis/ch"]
+        let resolver = ProjectResolver(home: "/Users/me") { onDisk.contains($0) }
+        XCTAssertEqual(resolver.project(for: "/Users/me/code/app/Sources/UI/View.swift")?.name, "app")
+        XCTAssertEqual(resolver.project(for: "/Users/me/code/app/Sources/UI/View.swift")?.id, "/Users/me/code/app")
+        XCTAssertEqual(resolver.project(for: "/Users/me/Documents/Thesis/ch/one.tex")?.name, "Thesis")
+        XCTAssertNil(resolver.project(for: "/Users/me/Documents/notes.txt"))
+        // A file from another Mac: only the path is known.
+        XCTAssertEqual(resolver.project(for: "/Users/lab/Developer/Parser/src/main.c")?.name, "Parser")
+        XCTAssertEqual(resolver.project(for: "/Users/lab/Developer/Parser/src/lexer/scan.c")?.name, "Parser")
+        XCTAssertEqual(resolver.project(for: "/Users/lab/Documents/GitHub/Site/index.html")?.name, "Site")
+        XCTAssertNil(resolver.project(for: "/var/log/system.log"))
+
+        let store = try EventStore()
+        let day = DateInterval(start: t0 - 10, duration: 86_400)
+        let file = Sample(bundleID: "com.apple.dt.Xcode", appName: "Xcode", title: "View.swift",
+                          path: "/Users/me/code/app/Sources/UI/View.swift")
+        let events = [event(file, 0, 600), event(mail(), 600, 900)]
+        let tree = Analyzer.tree(events, in: day, tagger: try store.tagger(), mode: .byProject, projects: resolver)
+        XCTAssertEqual(tree.map(\.label), ["app"])
+        XCTAssertEqual(tree[0].kind, .project)
+        XCTAssertEqual(tree[0].seconds, 600, accuracy: 0.001)
+        XCTAssertEqual(tree[0].children?.first?.label, "Xcode")
+        let report = Analyzer.report(events, in: day, tagger: try store.tagger(), calendar: utc, projects: resolver)
+        XCTAssertEqual(report.projects.map(\.label), ["app"])
+    }
+
+    func testReviewComparesWithThePeriodBefore() throws {
+        let store = try EventStore()
+        let tagger = try store.tagger()
+        let start = utc.startOfDay(for: t0)
+        let previous = DateInterval(start: start - 7 * 86_400, duration: 7 * 86_400)
+        let current = DateInterval(start: start, duration: 7 * 86_400)
+        func at(_ base: Date, _ sample: Sample, _ from: TimeInterval, _ minutes: Double) -> ActivityEvent {
+            ActivityEvent(sample: sample, start: base + from, end: base + from + minutes * 60)
+        }
+        let zotero = Sample(bundleID: "org.zotero.zotero", appName: "Zotero", title: "Library")
+        let before = [at(previous.start, xcode("A.swift"), 9 * 3600, 60), at(previous.start, mail(), 11 * 3600, 60)]
+        let now = [at(current.start, xcode("A.swift"), 9 * 3600, 120), at(current.start, mail(), 12 * 3600, 20),
+                   at(current.start + 86_400, zotero, 9 * 3600, 30)]
+        let review = Analyzer.review(now, in: current, previous: before, in: previous, tagger: tagger, calendar: utc)
+        XCTAssertEqual(review.total, 170 * 60, accuracy: 0.001)
+        XCTAssertEqual(review.previousTotal, 120 * 60, accuracy: 0.001)
+        XCTAssertEqual(review.topTag?.tag?.key, "dev")
+        XCTAssertEqual(review.risers.map { $0.tag?.key }, ["dev", "study"])
+        XCTAssertEqual(review.fallers.map { $0.tag?.key }, ["comm"])
+        XCTAssertEqual(review.newApps, ["Zotero"])
+        XCTAssertEqual(review.busiest?.day, current.start)
+        XCTAssertEqual(review.deepSeconds, 150 * 60, accuracy: 0.001)       // 2 h of Xcode and 30 min of Zotero
+        XCTAssertEqual(review.previousDeepSeconds, 60 * 60, accuracy: 0.001)
+        XCTAssertEqual(review.bestFocusDay?.day, current.start)
+    }
 }
