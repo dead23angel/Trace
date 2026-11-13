@@ -284,8 +284,10 @@
 "last synced %@" = "上次同步 %@";
 "Stop syncing" = "停止同步";
 "Removes the other Macs' records from this Mac. The files in the folder are kept." = "从本机移除其他 Mac 的记录，文件夹里的文件会保留。";
-"Keep several Macs in step, or keep a copy of your records, through a folder that is synced for you: iCloud Drive, Dropbox, a network drive. Each Mac writes its own records there and reads the others'. Tags and rules are shared." = "通过一个会自动同步的文件夹（iCloud 云盘、Dropbox、网络硬盘等），让多台 Mac 的记录保持一致，或者留一份备份。每台 Mac 只往里写自己的记录，并读取其他 Mac 的记录；标签和规则是共用的。";
-"Use iCloud Drive" = "使用 iCloud 云盘";
-"Choose folder…" = "选择文件夹…";
-"Sync is off by default. When it is on, your records are stored in that folder as readable files, so anyone who can open the folder can read them." = "同步默认关闭。开启后，记录会以可读文件的形式保存在这个文件夹里，能打开这个文件夹的人都能读到它们。";
 "Trace itself never connects to the network. Records are also written to your sync folder." = "Trace 本身不联网。记录同时会写入你的同步文件夹。";
+"Sync with iCloud" = "通过 iCloud 同步";
+"iCloud Drive is not turned on for this Mac. Turn it on in System Settings, or use another folder below." = "这台 Mac 没有开启 iCloud 云盘。请在系统设置里开启，或者在下面改用其他文件夹。";
+"Keeps your records backed up in iCloud Drive and in step across your Macs. Nothing to set up." = "把记录备份到 iCloud 云盘，并在你的几台 Mac 之间保持一致。不需要任何设置。";
+"Stored in" = "保存位置";
+"Sync is off until you turn it on. Your records are then also stored in iCloud Drive as readable files, in a folder named Trace. Turning it off removes the other Macs' records from this Mac and leaves the files in place." = "同步默认关闭。开启后，记录会同时以可读文件的形式保存在 iCloud 云盘里名为 Trace 的文件夹中。关闭后，会从本机移除其他 Mac 的记录，云盘里的文件保留。";
+"Use another folder instead…" = "改用其他文件夹…";

@@ -146,8 +146,23 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var sync: some View {
+        let iCloud = model.iCloudFolder
+        let usesICloud = model.syncFolder != nil && model.syncFolder == iCloud?.path
+        row(L("Sync with iCloud"),
+            iCloud == nil ? L("iCloud Drive is not turned on for this Mac. Turn it on in System Settings, or use another folder below.")
+                          : L("Keeps your records backed up in iCloud Drive and in step across your Macs. Nothing to set up."),
+            last: model.syncFolder == nil) {
+            Toggle(L("Sync with iCloud"), isOn: Binding(
+                get: { usesICloud },
+                set: { on in
+                    if on, let iCloud { model.enableSync(folder: iCloud) } else { model.disableSync() }
+                }))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .disabled(iCloud == nil || (model.syncFolder != nil && !usesICloud))
+        }
         if let folder = model.syncFolder {
-            row(L("Sync folder"), Analyzer.abbreviate(folder), mono: true) {
+            row(usesICloud ? L("Stored in") : L("Sync folder"), Analyzer.abbreviate(folder), mono: true) {
                 Button(L("Show in Finder")) {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: folder)])
                 }
@@ -167,27 +182,23 @@ struct SettingsView: View {
                     } ?? "")
                 }
             }
-            Hairline()
-            row(L("Stop syncing"), L("Removes the other Macs' records from this Mac. The files in the folder are kept."), last: true) {
-                Button(L("Stop syncing")) { model.disableSync() }.buttonStyle(.trBordered)
+            if !usesICloud {
+                Hairline()
+                row(L("Stop syncing"), L("Removes the other Macs' records from this Mac. The files in the folder are kept."), last: true) {
+                    Button(L("Stop syncing")) { model.disableSync() }.buttonStyle(.trBordered)
+                }
             }
         } else {
-            Text(L("Keep several Macs in step, or keep a copy of your records, through a folder that is synced for you: iCloud Drive, Dropbox, a network drive. Each Mac writes its own records there and reads the others'. Tags and rules are shared."))
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                if let folder = model.iCloudFolder {
-                    Button(L("Use iCloud Drive")) { model.enableSync(folder: folder) }.buttonStyle(.trProminent)
-                }
-                Button(L("Choose folder…")) { model.chooseSyncFolder() }.buttonStyle(.trBordered)
-            }
             if let error = model.syncError {
                 Text(error).font(.system(size: 12)).foregroundStyle(Palette.color(4))
             }
-            Text(L("Sync is off by default. When it is on, your records are stored in that folder as readable files, so anyone who can open the folder can read them."))
+            Text(L("Sync is off until you turn it on. Your records are then also stored in iCloud Drive as readable files, in a folder named Trace. Turning it off removes the other Macs' records from this Mac and leaves the files in place."))
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+            Button(L("Use another folder instead…")) { model.chooseSyncFolder() }
+                .buttonStyle(.trLink)
+                .font(.system(size: 12))
         }
     }
 

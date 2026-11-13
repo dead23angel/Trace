@@ -54,7 +54,7 @@ A week, a month or a year at a glance: time per day stacked by tag, the hours yo
 
 ### Several Macs, one picture
 
-Sync is optional and off by default. Point Trace at a folder that is kept in sync for you (iCloud Drive, Dropbox, a network drive) and each Mac writes its own records there and reads the others'. Tags and rules are shared, and you can look at all Macs together or one at a time. The files are plain text, so the folder doubles as a backup.
+Sync is optional and off by default. Turn on **Sync with iCloud** in Settings and Trace keeps its records in a `Trace` folder in iCloud Drive: there is nothing to set up, and every Mac signed in to the same iCloud account that turns it on joins in. Each Mac writes its own records and reads the others'. Any other synced folder (Dropbox, a network drive) works too. Tags and rules are shared, and you can look at all Macs together or one at a time. The files are plain text, so the folder doubles as a backup.
 
 ### Made for the Mac
 
