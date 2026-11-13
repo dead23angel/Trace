@@ -248,27 +248,34 @@ private struct DayColumnCard: View {
                     .padding(.top, 8)
                     .accessibilityLabel(L("Apps through the day, top to bottom"))
 
-                    ZStack(alignment: .topLeading) {
-                        ForEach(Array(scale.hours), id: \.self) { hour in
-                            Hairline().offset(y: CGFloat(hour - scale.hours.lowerBound) * hourHeight)
-                        }
-                        ForEach(model.blocks) { block in
-                            let blockHeight = max(4, CGFloat(scale.length(block.duration)) * height - 2)
-                            let interval = DateInterval(start: block.start, end: block.end)
-                            BlockTile(block: block, height: blockHeight, isSelected: model.selection == interval) {
-                                model.selection = model.selection == interval ? nil : interval
+                    GeometryReader { geo in
+                        // Sessions on two Macs at the same time sit side by side.
+                        let lanes = Lanes.assign(model.blocks.map { ($0.start, $0.end) })
+                        ZStack(alignment: .topLeading) {
+                            ForEach(Array(scale.hours), id: \.self) { hour in
+                                Hairline().offset(y: CGFloat(hour - scale.hours.lowerBound) * hourHeight)
                             }
-                            .padding(.leading, 4)
-                            .offset(y: CGFloat(scale.fraction(block.start)) * height)
+                            ForEach(Array(model.blocks.enumerated()), id: \.element.id) { index, block in
+                                let blockHeight = max(4, CGFloat(scale.length(block.duration)) * height - 2)
+                                let interval = DateInterval(start: block.start, end: block.end)
+                                let width = (geo.size.width - 4) / CGFloat(lanes[index].of)
+                                BlockTile(block: block, height: blockHeight, isSelected: model.selection == interval) {
+                                    model.selection = model.selection == interval ? nil : interval
+                                }
+                                .frame(width: max(8, width - (lanes[index].of > 1 ? 2 : 0)))
+                                .offset(x: 4 + CGFloat(lanes[index].lane) * width,
+                                        y: CGFloat(scale.fraction(block.start)) * height)
+                            }
+                            if let drag {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Theme.accent.opacity(0.18))
+                                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.accent))
+                                    .frame(height: drag.upperBound - drag.lowerBound)
+                                    .offset(y: drag.lowerBound)
+                                    .allowsHitTesting(false)
+                            }
                         }
-                        if let drag {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Theme.accent.opacity(0.18))
-                                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.accent))
-                                .frame(height: drag.upperBound - drag.lowerBound)
-                                .offset(y: drag.lowerBound)
-                                .allowsHitTesting(false)
-                        }
+                        .frame(width: geo.size.width, height: height, alignment: .topLeading)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: height, alignment: .top)
@@ -296,6 +303,7 @@ private struct DayColumnCard: View {
 }
 
 private struct BlockTile: View {
+    @EnvironmentObject private var model: AppModel
     let block: Block
     let height: CGFloat
     let isSelected: Bool
@@ -325,6 +333,7 @@ private struct BlockTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(tagName(block.tag)) · \(block.title) · \(Fmt.time(block.start)) – \(Fmt.time(block.end))")
+        .help("\(tagName(block.tag)) · \(block.title) · \(Fmt.time(block.start)) – \(Fmt.time(block.end))"
+              + (model.devices.isEmpty ? "" : " · " + model.deviceName(forDevice: block.device)))
     }
 }

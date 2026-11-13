@@ -30,6 +30,8 @@ public struct Block: Identifiable, Sendable {
     public var events: [ActivityEvent]
     public var id: Date { start }
     public var duration: TimeInterval { end.timeIntervalSince(start) }
+    /// The Mac the session happened on; empty for this Mac.
+    public var device: String { events.first?.device ?? "" }
 
     /// The app and item the session was mostly about, e.g. "Xcode · Store.swift".
     public var title: String {
@@ -83,6 +85,36 @@ public struct ItemTotal: Identifiable, Sendable {
     public init(label: String, seconds: TimeInterval) {
         self.label = label
         self.seconds = seconds
+    }
+}
+
+/// Puts intervals that overlap in time into separate lanes, so that they
+/// can be drawn side by side.
+public enum Lanes {
+    /// For each interval (sorted by start), its lane, and the number of lanes
+    /// used by the group of overlapping intervals it belongs to.
+    public static func assign(_ intervals: [(start: Date, end: Date)]) -> [(lane: Int, of: Int)] {
+        var result = Array(repeating: (lane: 0, of: 1), count: intervals.count)
+        var ends: [Date] = []           // end of the last interval in each lane
+        var group: [Int] = []           // indices in the current overlapping group
+        var groupEnd = Date.distantPast
+        func close() {
+            for index in group { result[index].of = ends.count }
+        }
+        for (index, interval) in intervals.enumerated() {
+            if interval.start >= groupEnd {
+                close()
+                group = []
+                ends = []
+            }
+            let lane = ends.firstIndex { $0 <= interval.start } ?? ends.count
+            if lane == ends.count { ends.append(interval.end) } else { ends[lane] = interval.end }
+            result[index].lane = lane
+            group.append(index)
+            groupEnd = max(groupEnd, interval.end)
+        }
+        close()
+        return result
     }
 }
 
@@ -273,6 +305,13 @@ public enum Analyzer {
     /// Consecutive events in the same app, merged across short gaps.
     public static func appRuns(_ events: [ActivityEvent], in day: DateInterval,
                                tagger: Tagger, maxGap: TimeInterval = 30) -> [AppRun] {
+        Dictionary(grouping: events, by: \.device).values
+            .flatMap { runs($0, in: day, tagger: tagger, maxGap: maxGap) }
+            .sorted { $0.start < $1.start }
+    }
+
+    private static func runs(_ events: [ActivityEvent], in day: DateInterval,
+                             tagger: Tagger, maxGap: TimeInterval) -> [AppRun] {
         var runs: [AppRun] = []
         for e in events {
             guard let span = clip(e, to: day) else { continue }
@@ -329,8 +368,18 @@ public enum Analyzer {
     /// tag form a run; a run shorter than `minDuration` is a brief interruption
     /// and joins its neighbour instead of splitting the session. Gaps longer
     /// than `maxGap` always split. A session takes the tag it spent most time on.
+    ///
+    /// Each Mac gets its own sessions: when two Macs were in use at the same
+    /// time, their sessions overlap instead of being mixed into one.
     public static func blocks(_ events: [ActivityEvent], in day: DateInterval, tagger: Tagger,
                               maxGap: TimeInterval = 300, minDuration: TimeInterval = 120) -> [Block] {
+        Dictionary(grouping: events, by: \.device).values
+            .flatMap { sessions($0, in: day, tagger: tagger, maxGap: maxGap, minDuration: minDuration) }
+            .sorted { $0.start < $1.start }
+    }
+
+    private static func sessions(_ events: [ActivityEvent], in day: DateInterval, tagger: Tagger,
+                                 maxGap: TimeInterval, minDuration: TimeInterval) -> [Block] {
         struct Run {
             var start: Date
             var end: Date

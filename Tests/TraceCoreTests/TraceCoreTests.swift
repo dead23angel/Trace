@@ -401,4 +401,30 @@ final class TraceCoreTests: XCTestCase {
         _ = try syncB.sync(now: t0)
         XCTAssertNil(try b.tags().first { $0.name == "Thesis" })
     }
+
+    func testOverlappingMacsKeepSeparateSessions() throws {
+        let store = try EventStore()
+        let tagger = try store.tagger()
+        let day = DateInterval(start: t0 - 10, duration: 86_400)
+        var remote = ActivityEvent(sample: Sample(bundleID: "com.apple.mail", appName: "Mail", title: "Inbox"),
+                                   start: t0 + 300, end: t0 + 900)
+        remote.device = "mac-b"
+        let events = [
+            ActivityEvent(sample: xcode("A.swift"), start: t0, end: t0 + 600),
+            remote,
+            ActivityEvent(sample: xcode("A.swift"), start: t0 + 600, end: t0 + 1200),
+        ]
+        let blocks = Analyzer.blocks(events, in: day, tagger: tagger)
+        XCTAssertEqual(blocks.map(\.device), ["", "mac-b"])
+        XCTAssertEqual(blocks[0].duration, 1200, accuracy: 0.001)
+        XCTAssertEqual(blocks[1].duration, 600, accuracy: 0.001)
+        // Both count: the total is the sum, not the union.
+        XCTAssertEqual(Analyzer.summarize(events, in: day, tagger: tagger).total, 1800, accuracy: 0.001)
+
+        let lanes = Lanes.assign(blocks.map { ($0.start, $0.end) })
+        XCTAssertEqual(lanes.map(\.lane), [0, 1])
+        XCTAssertEqual(lanes.map(\.of), [2, 2])
+        let apart = Lanes.assign([(t0, t0 + 10), (t0 + 10, t0 + 20)])
+        XCTAssertEqual(apart.map(\.of), [1, 1])
+    }
 }

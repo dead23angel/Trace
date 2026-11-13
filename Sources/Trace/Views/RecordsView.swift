@@ -127,6 +127,9 @@ struct RecordsView: View {
                     Text(tagName(block.tag)).fontWeight(.semibold)
                     Text(Fmt.records(rows.count)).font(.system(size: 12)).foregroundStyle(Theme.muted)
                     Text(block.title).font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
+                    if !model.devices.isEmpty {
+                        Badge(text: model.deviceName(forDevice: block.device))
+                    }
                     Spacer(minLength: 8)
                     Text(Fmt.duration(block.duration)).fontWeight(.semibold)
                 }

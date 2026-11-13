@@ -255,7 +255,11 @@ final class AppModel: ObservableObject {
 
     /// Name of the Mac an event was recorded on.
     func deviceName(for event: ActivityEvent) -> String {
-        event.isLocal ? deviceName : (devices.first { $0.id == event.device }?.name ?? event.device)
+        deviceName(forDevice: event.device)
+    }
+
+    func deviceName(forDevice id: String) -> String {
+        id.isEmpty ? deviceName : (devices.first { $0.id == id }?.name ?? id)
     }
 
     /// Whether `event` matches the search text and tag filter.

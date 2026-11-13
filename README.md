@@ -128,7 +128,7 @@ Copy `Resources/zh-Hans.lproj` to `Resources/<code>.lproj`, translate the right-
 - Private browsing windows are not detected and are recorded like any other window. Exclude the browser or turn off web addresses if that matters to you.
 - Page addresses depend on what each browser exposes to the Accessibility API. Safari and Chromium-based browsers (Chrome, Edge, Arc, Brave) are covered; others may only report the window title.
 
-- With sync on, time is not de-duplicated across Macs: if two Macs are in use at the same moment, both count. Tags added by hand to a single record stay on the Mac where they were added.
+- With sync on, time is not de-duplicated across Macs: if two Macs are in use at the same moment (for example over remote desktop), both count, and their sessions are shown side by side. Tags added by hand to a single record stay on the Mac where they were added.
 
 ## Contributing
 

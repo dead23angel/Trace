@@ -141,8 +141,10 @@ private struct HourlyCard: View {
                 HStack(alignment: .bottom, spacing: 0) {
                     ForEach(hours, id: \.self) { hour in
                         VStack(spacing: 6) {
+                            // Two Macs in use at once can add up to more than an hour.
+                            let full = max(3600, (byHour[hour] ?? []).reduce(0) { $0 + $1.seconds })
                             PillColumn(segments: (byHour[hour] ?? []).map {
-                                (fraction: $0.seconds / 3600, color: Palette.color($0.tag))
+                                (fraction: $0.seconds / full, color: Palette.color($0.tag))
                             })
                             Text(String(format: "%02d", hour)).font(.system(size: 11)).foregroundStyle(Theme.muted)
                         }
