@@ -89,6 +89,7 @@ public final class EventStore: @unchecked Sendable {
         }
         try migrator.migrate(db)
         try seedPresetsIfNeeded()
+        try addNewPresetRules()
     }
 
     // MARK: Events
@@ -434,11 +435,35 @@ public final class EventStore: @unchecked Sendable {
                               colorIndex: preset.colorIndex, sortOrder: index)
                 try tag.insert(db)
                 guard let tagID = tag.id else { continue }
-                for r in preset.rules {
+                for r in preset.rules + preset.added {
                     var rule = Rule(tagID: tagID, field: r.0, op: r.1, value: r.2)
                     try rule.insert(db)
                 }
             }
+            try Self.setMeta(db, "presetsVersion", String(Presets.version))
+        }
+    }
+
+    /// Gives a database created by an earlier version the preset rules that
+    /// have been added since. Runs once per version.
+    private func addNewPresetRules() throws {
+        try db.write { db in
+            let have = Int(try Self.meta(db, "presetsVersion") ?? "") ?? 1
+            guard have < Presets.version else { return }
+            var changed = false
+            for preset in Presets.all {
+                guard let tag = try Tag.filter(Column("key") == preset.key).fetchOne(db), let tagID = tag.id else { continue }
+                let existing = Set(try Rule.filter(Column("tagID") == tagID).fetchAll(db)
+                    .map { "\($0.field.rawValue)|\($0.value.lowercased())" })
+                for r in preset.added where !existing.contains("\(r.0.rawValue)|\(r.2.lowercased())") {
+                    var rule = Rule(tagID: tagID, field: r.0, op: r.1, value: r.2)
+                    try rule.insert(db)
+                    changed = true
+                }
+            }
+            try Self.setMeta(db, "presetsVersion", String(Presets.version))
+            // Publish the additions to other Macs only if this Mac already shares its tagging.
+            if changed, try Self.meta(db, "taggingUpdated") != nil { try Self.touchTagging(db) }
         }
     }
 }

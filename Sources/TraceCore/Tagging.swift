@@ -64,7 +64,16 @@ public enum Presets {
         public let name: String
         public let colorIndex: Int
         public let rules: [(RuleField, RuleOp, String)]
+        /// Rules added in a later version; existing databases receive them
+        /// once, so a rule the user has deleted does not come back.
+        public var added: [(RuleField, RuleOp, String)] = []
     }
+
+    /// Raised whenever `added` grows.
+    public static let version = 2
+
+    private static func apps(_ ids: String...) -> [(RuleField, RuleOp, String)] { ids.map { (.app, .equals, $0) } }
+    private static func sites(_ hosts: String...) -> [(RuleField, RuleOp, String)] { hosts.map { (.url, .contains, $0) } }
 
     /// Order matters: site rules come before the catch-all "browsing" tag.
     public static let all: [Preset] = [
@@ -76,13 +85,25 @@ public enum Presets {
             (.app, .equals, "dev.zed.Zed"),
             (.url, .contains, "github.com"),
             (.url, .contains, "stackoverflow.com"),
-        ]),
+        ],
+               added: apps("com.todesktop.230313mzl4w4u92", "com.sublimetext.4", "com.github.GitHubClient", "dev.warp.Warp-Stable",
+                         "net.kovidgoyal.kitty", "com.mitchellh.ghostty", "com.docker.docker", "com.postmanlabs.mac",
+                         "com.tinyapp.TablePlus", "com.navicat.NavicatPremium", "com.termius-dmg.mac", "org.gnu.Emacs",
+                         "com.google.android.studio", "com.mongodb.compass", "com.apple.Console")
+                + [(.app, .hasPrefix, "com.jetbrains.")]
+                + sites("gitlab.com", "gitee.com", "huggingface.co", "npmjs.com", "pypi.org", "juejin.cn", "csdn.net",
+                        "leetcode", "docs.rs", "pkg.go.dev", "localhost", "127.0.0.1")),
         Preset(key: "study", name: "Study", colorIndex: 1, rules: [
             (.category, .equals, "public.app-category.education"),
             (.category, .equals, "public.app-category.reference"),
             (.url, .contains, "developer.apple.com"),
             (.url, .contains, "wikipedia.org"),
-        ]),
+        ],
+               added: apps("org.zotero.zotero", "com.apple.iBooksX", "net.ankiweb.dtop", "com.readdle.PDFExpert-Mac",
+                         "com.apple.Dictionary", "texstudio", "edu.bibdesk")
+                + sites("arxiv.org", "scholar.google", "overleaf.com", "coursera.org", "cnki.net", "semanticscholar.org",
+                        "dl.acm.org", "ieeexplore.ieee.org", "sciencedirect.com", "springer.com", "openreview.net",
+                        "nature.com", "researchgate.net", "docs.python.org", "edx.org", "khanacademy.org")),
         Preset(key: "comm", name: "Communication", colorIndex: 2, rules: [
             (.category, .equals, "public.app-category.social-networking"),
             (.app, .equals, "com.apple.mail"),
@@ -92,7 +113,14 @@ public enum Presets {
             (.app, .equals, "us.zoom.xos"),
             (.app, .equals, "com.microsoft.teams2"),
             (.app, .equals, "com.electron.lark"),
-        ]),
+        ],
+               added: apps("com.tencent.qq", "com.tencent.WeWorkMac", "com.alibaba.DingTalkMac", "com.bytedance.macos.feishu",
+                         "com.tencent.meeting", "com.microsoft.Outlook", "com.apple.FaceTime", "ru.keepcoder.Telegram",
+                         "net.whatsapp.WhatsApp", "com.hnc.Discord", "com.netease.macmail", "com.skype.skype",
+                         "com.readdle.smartemail-Mac", "com.apple.mobilephone")
+                + sites("mail.google.com", "outlook.live.com", "outlook.office.com", "mail.qq.com", "mail.163.com",
+                        "slack.com", "discord.com", "web.whatsapp.com", "web.telegram.org", "meet.google.com",
+                        "feishu.cn", "larksuite.com", "teams.microsoft.com")),
         Preset(key: "fun", name: "Entertainment", colorIndex: 4, rules: [
             (.category, .equals, "public.app-category.entertainment"),
             (.category, .equals, "public.app-category.music"),
@@ -100,18 +128,31 @@ public enum Presets {
             (.url, .contains, "youtube.com"),
             (.url, .contains, "bilibili.com"),
             (.url, .contains, "netflix.com"),
-        ]),
+        ],
+               added: apps("com.netease.163music", "com.tencent.QQMusicMac", "com.spotify.client", "com.apple.Music", "com.apple.TV",
+                         "com.colliderli.iina", "org.videolan.vlc", "com.apple.podcasts", "com.apple.QuickTimePlayerX")
+                + sites("douyin.com", "twitch.tv", "weibo.com", "twitter.com", "//x.com", "reddit.com", "instagram.com",
+                        "tiktok.com", "iqiyi.com", "v.qq.com", "youku.com", "music.163.com", "xiaohongshu.com",
+                        "douban.com", "spotify.com", "facebook.com", "zhihu.com", "disneyplus.com", "primevideo.com")),
         Preset(key: "games", name: "Games", colorIndex: 6, rules: [
             (.category, .contains, "games"),
             (.app, .equals, "com.valvesoftware.steam"),
             (.app, .equals, "com.epicgames.EpicGamesLauncher"),
-        ]),
+        ],
+               added: apps("net.battle.app", "com.mojang.minecraftlauncher", "com.riotgames.RiotGames.RiotClientUx",
+                         "com.apple.Chess", "com.gog.galaxy")
+                + sites("store.steampowered.com", "steamcommunity.com", "epicgames.com", "itch.io")),
         Preset(key: "design", name: "Design", colorIndex: 7, rules: [
             (.category, .equals, "public.app-category.graphics-design"),
             (.category, .equals, "public.app-category.photography"),
             (.app, .equals, "com.figma.Desktop"),
             (.app, .equals, "com.bohemiancoding.sketch3"),
-        ]),
+        ],
+               added: apps("com.adobe.Photoshop", "com.adobe.illustrator", "com.adobe.InDesign", "com.adobe.PremierePro",
+                         "com.adobe.AfterEffects", "com.pixelmatorteam.pixelmator.x", "com.seriflabs.affinitydesigner2",
+                         "com.seriflabs.affinityphoto2", "com.apple.FinalCut", "com.blackmagic-design.DaVinciResolve",
+                         "com.jgraph.drawio.desktop", "com.apple.freeform")
+                + sites("figma.com", "canva.com", "dribbble.com", "behance.net")),
         Preset(key: "office", name: "Office", colorIndex: 5, rules: [
             (.category, .equals, "public.app-category.productivity"),
             (.category, .equals, "public.app-category.business"),
@@ -123,7 +164,12 @@ public enum Presets {
             (.app, .equals, "com.microsoft.Excel"),
             (.app, .equals, "com.microsoft.Powerpoint"),
             (.app, .equals, "com.kingsoft.wpsoffice.mac"),
-        ]),
+        ],
+               added: apps("com.apple.Notes", "notion.id", "md.obsidian", "com.apple.reminders", "com.apple.iCal",
+                         "com.lukilabs.lukiapp", "com.adobe.Acrobat.Pro", "com.microsoft.onenote.mac", "com.apple.Preview",
+                         "com.evernote.Evernote", "com.culturedcode.ThingsMac", "com.todoist.mac.Todoist")
+                + sites("docs.google.com", "sheets.google.com", "notion.so", "yuque.com", "shimo.im", "docs.qq.com",
+                        "office.com", "calendar.google.com", "drive.google.com", "trello.com", "airtable.com")),
         Preset(key: "browse", name: "Browsing", colorIndex: 3, rules: [
             (.app, .equals, "com.apple.Safari"),
             (.app, .equals, "com.google.Chrome"),
@@ -131,6 +177,8 @@ public enum Presets {
             (.app, .equals, "org.mozilla.firefox"),
             (.app, .equals, "com.microsoft.edgemac"),
             (.app, .equals, "com.brave.Browser"),
-        ]),
+        ],
+               added: apps("com.operasoftware.Opera", "com.vivaldi.Vivaldi", "org.chromium.Chromium", "com.kagi.kagimacOS",
+                         "app.zen-browser.zen", "com.duckduckgo.macos.browser", "com.google.Chrome.canary")),
     ]
 }

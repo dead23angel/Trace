@@ -454,4 +454,32 @@ final class TraceCoreTests: XCTestCase {
         XCTAssertEqual(report.byDevice.map(\.label), ["mac-a", ""])
         XCTAssertEqual(report.byDevice.map(\.seconds), [60, 20])
     }
+
+    func testWiderPresetsCoverCommonAppsAndSites() throws {
+        let store = try EventStore()
+        let tagger = try store.tagger()
+        func key(_ bundleID: String, url: String? = nil) -> String? {
+            tagger.primary(for: ActivityEvent(sample: Sample(bundleID: bundleID, appName: "x", url: url),
+                                              start: t0, end: t0 + 1))?.key
+        }
+        XCTAssertEqual(key("com.tencent.qq"), "comm")
+        XCTAssertEqual(key("com.tencent.meeting"), "comm")
+        XCTAssertEqual(key("com.netease.163music"), "fun")
+        XCTAssertEqual(key("com.jetbrains.pycharm"), "dev")
+        XCTAssertEqual(key("org.zotero.zotero"), "study")
+        XCTAssertEqual(key("md.obsidian"), "office")
+        XCTAssertEqual(key("com.adobe.Photoshop"), "design")
+        XCTAssertEqual(key("com.microsoft.edgemac", url: "https://arxiv.org/abs/1234"), "study")
+        XCTAssertEqual(key("com.microsoft.edgemac", url: "https://x.com/home"), "fun")
+        XCTAssertEqual(key("com.microsoft.edgemac", url: "https://example.com/"), "browse")
+        // No two presets claim the same app or site.
+        var seen: [String: String] = [:]
+        for preset in Presets.all {
+            for rule in preset.rules + preset.added {
+                let id = "\(rule.0.rawValue)|\(rule.2.lowercased())"
+                XCTAssertNil(seen[id], "\(id) is in both \(seen[id] ?? "") and \(preset.key)")
+                seen[id] = preset.key
+            }
+        }
+    }
 }

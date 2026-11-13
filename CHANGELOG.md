@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- **Sync folder** (optional, off by default): keep several Macs in step, or keep a backup, through any folder that is synced for you, such as iCloud Drive. Each Mac writes its own records and reads the others'; tags and rules are shared. A menu in the sidebar shows all Macs together or one at a time.
+- **Sync folder** (optional, off by default): keep several Macs in step, or keep a backup, through any folder that is synced for you, such as iCloud Drive. Each Mac writes its own records and reads the others'; tags and rules are shared. A menu in the sidebar shows all Macs together or one at a time. Macs can be named, reports show time per Mac, and simultaneous use on two Macs is drawn side by side.
+- **Wider built-in tags**: about 180 more common apps and sites are recognised out of the box, including QQ, WeCom, DingTalk, Feishu, Tencent Meeting, NetEase Cloud Music, JetBrains IDEs, Zotero, Obsidian, Notion and Adobe apps. Existing installs receive the additions once.
 
 ## 0.1.0
 
