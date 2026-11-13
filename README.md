@@ -76,7 +76,7 @@ Requires macOS 14 or later, on Apple silicon or Intel.
 2. Open it and drag Trace to Applications.
 3. Start Trace. It asks for **Accessibility** access (System Settings › Privacy & Security › Accessibility); without it Trace still records which app is in front, but not window titles, file paths or URLs.
 
-If macOS says it cannot verify Trace, the build you downloaded is not notarized by Apple. Open System Settings › Privacy & Security, scroll to the message about Trace and click **Open Anyway**. You only need to do this once.
+Releases are signed with a Developer ID certificate and notarized by Apple, so they open without a security warning.
 
 ## Build from source
 
