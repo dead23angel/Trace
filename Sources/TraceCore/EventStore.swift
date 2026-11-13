@@ -105,6 +105,13 @@ public final class EventStore: @unchecked Sendable {
         }
     }
 
+    /// Stores ready-made events, e.g. demo data.
+    public func insert(_ events: [ActivityEvent]) throws {
+        try db.write { db in
+            for var event in events { try event.insert(db) }
+        }
+    }
+
     public func deleteEvent(id: Int64) throws {
         _ = try db.write { db in try ActivityEvent.deleteOne(db, key: id) }
     }

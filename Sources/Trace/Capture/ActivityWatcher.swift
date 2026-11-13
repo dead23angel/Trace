@@ -46,6 +46,13 @@ final class ActivityWatcher: ObservableObject {
         self.store = store
     }
 
+    /// Shows `sample` as the current activity without recording anything.
+    func showDemo(_ sample: Sample, since: Date) {
+        current = sample
+        currentSince = since
+        isTrusted = true
+    }
+
     func start() {
         guard timer == nil else { return }
         let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in

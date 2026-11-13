@@ -444,7 +444,21 @@ struct EmptyState: View {
     }
 }
 
-/// The app's mark: a pulse line on an accent tile.
+/// The pulse line of the app icon, on a 24-point grid.
+struct PulseShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let points: [(CGFloat, CGFloat)] = [(2, 12), (6, 12), (9, 4), (14, 20), (17, 12), (22, 12)]
+        let unit = min(rect.width, rect.height) / 24
+        var path = Path()
+        for (index, p) in points.enumerated() {
+            let point = CGPoint(x: rect.minX + p.0 * unit, y: rect.minY + p.1 * unit)
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        return path
+    }
+}
+
+/// The app's mark: the icon's pulse line on an accent tile.
 struct BrandMark: View {
     var size: CGFloat = 28
 
@@ -453,9 +467,9 @@ struct BrandMark: View {
             .fill(Theme.accent)
             .frame(width: size, height: size)
             .overlay(
-                Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundStyle(Theme.onAccent)
+                PulseShape()
+                    .stroke(Theme.onAccent, style: StrokeStyle(lineWidth: size * 0.085, lineCap: .round, lineJoin: .round))
+                    .frame(width: size * 0.66, height: size * 0.66)
             )
             .accessibilityHidden(true)
     }

@@ -39,6 +39,8 @@ final class AppModel: ObservableObject {
     let store: EventStore
     let watcher: ActivityWatcher
     let databaseURL: URL?
+    /// Started with `--demo`: made-up data in memory, nothing recorded.
+    let isDemo: Bool
 
     // Navigation and selection, shared so one page can send you to another.
     @Published var pane: Pane = .overview
@@ -106,13 +108,22 @@ final class AppModel: ObservableObject {
         captureFiles = defaults.bool(forKey: "captureFiles")
         captureURLs = defaults.bool(forKey: "captureURLs")
         excludedApps = defaults.stringArray(forKey: "excludedApps") ?? []
-        showsOnboarding = !defaults.bool(forKey: "onboarded")
+        // Launch arguments, used for demos and screenshots; they are not saved.
+        let args = CommandLine.arguments
+        func value(after flag: String) -> String? {
+            args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        }
+        let demo = args.contains("--demo")
+        isDemo = demo
+        if let override = value(after: "--language").flatMap(AppLanguage.init(rawValue:)) { language = override }
+        if let override = value(after: "--appearance").flatMap(Appearance.init(rawValue:)) { appearance = override }
+        showsOnboarding = !demo && !defaults.bool(forKey: "onboarded")
 
         // Keep data in Application Support; fall back to memory if that fails
         // so the app still opens and can say what went wrong.
         var url: URL?
         var opened: EventStore?
-        if let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+        if !demo, let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                       appropriateFor: nil, create: true) {
             let folder = support.appendingPathComponent("Trace", isDirectory: true)
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -132,8 +143,15 @@ final class AppModel: ObservableObject {
         watcher.excluded = Set(excludedApps)
 
         L10n.apply(language)
+        if demo {
+            try? store.insert(DemoData.events())
+            if let last = (try? store.events(from: Date().addingTimeInterval(-86_400), to: Date()))?.last {
+                watcher.showDemo(Sample(bundleID: last.bundleID, appName: last.appName, title: last.title,
+                                        path: last.path, url: last.url), since: last.start)
+            }
+        }
         reload()
-        watcher.start()
+        if !demo { watcher.start() }
 
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.reloadIfToday() }

@@ -13,6 +13,7 @@ struct TraceApp: App {
                 // Rebuild the whole tree when the language changes so every
                 // string is looked up again.
                 .id(model.language)
+                .task { Screenshots.runIfRequested(model: model) }
         }
         .defaultSize(width: 1360, height: 900)
         .windowStyle(.hiddenTitleBar)

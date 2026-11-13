@@ -292,10 +292,16 @@ private struct Inspector: View {
                 field(L("App")) { Text(event.appName) }
                 field(L("Type")) { Text(event.kindName) }
                 if let path = event.path, !path.isEmpty {
-                    field(L("Path")) { Text(Analyzer.abbreviate(path)).font(Theme.mono).textSelection(.enabled) }
+                    field(L("Path")) {
+                        Text(Analyzer.abbreviate(path)).font(Theme.mono).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if let detail = event.url.flatMap({ _ in event.detail }) {
-                    field(L("URL")) { Text(detail).font(Theme.mono).textSelection(.enabled) }
+                    field(L("URL")) {
+                        Text(detail).font(Theme.mono).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if let session {
                     field(L("Session")) {

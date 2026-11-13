@@ -261,4 +261,21 @@ final class TraceCoreTests: XCTestCase {
         XCTAssertEqual(blocks[0].events.count, 3)
         XCTAssertEqual(blocks[0].duration, 1200, accuracy: 0.001)
     }
+
+    func testDemoDataIsTaggedAndStopsAtNow() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let day = calendar.startOfDay(for: t0)
+        let now = day + 12 * 3600
+        let events = DemoData.events(now: now, days: 7, calendar: calendar, home: "/Users/me")
+        XCTAssertFalse(events.isEmpty)
+        XCTAssertTrue(events.allSatisfy { $0.end <= now && $0.end > $0.start })
+
+        let store = try EventStore()
+        try store.insert(events)
+        let tagger = try store.tagger()
+        let today = try store.events(from: day, to: now)
+        XCTAssertEqual(Set(today.compactMap { tagger.primary(for: $0)?.key }), ["dev", "comm"])
+        XCTAssertEqual(today.first?.path, "/Users/me/Developer/Trace/Sources/Trace/Views/TimelineView.swift")
+    }
 }

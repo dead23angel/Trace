@@ -1,0 +1,103 @@
+import AppKit
+import TraceCore
+
+/// Takes the screenshots used in the README. Started with
+/// `--demo --shots <folder>`: the app walks through its pages, saves one
+/// PNG per page into the folder and quits. It draws its own window, so no
+/// screen recording permission is involved.
+@MainActor
+enum Screenshots {
+    private struct Shot {
+        let name: String
+        let prepare: (AppModel) -> Void
+    }
+
+    static func runIfRequested(model: AppModel) {
+        let args = CommandLine.arguments
+        guard let index = args.firstIndex(of: "--shots"), index + 1 < args.count else { return }
+        let folder = URL(fileURLWithPath: args[index + 1], isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let shots: [Shot] = [
+            Shot(name: "overview") { $0.pane = .overview },
+            Shot(name: "timeline") { model in
+                model.pane = .timeline
+                model.timelineMode = .byTag
+            },
+            Shot(name: "records") { model in
+                // Open the session with the documentation page and select it.
+                let event = model.events.first { $0.title.hasPrefix("AXUIElement") }
+                model.showRecords(block: model.blocks.first { block in
+                    block.events.contains { $0.id == event?.id }
+                }?.start, event: event?.id)
+            },
+            Shot(name: "reports") { $0.showReport(.week) },
+            Shot(name: "tags") { $0.pane = .tags },
+            Shot(name: "rules") { $0.pane = .rules },
+            Shot(name: "overview-dark") { model in
+                model.pane = .overview
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+            },
+            Shot(name: "overview-zh") { model in
+                NSApp.appearance = NSAppearance(named: .aqua)
+                model.language = .zhHans
+            },
+        ]
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.styleMask.contains(.titled) }) else {
+                NSApp.terminate(nil)
+                return
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            window.setContentSize(NSSize(width: 1320, height: 860))
+            window.center()
+            for shot in shots {
+                shot.prepare(model)
+                try? await Task.sleep(for: .seconds(1.2))
+                if let data = capture(window) {
+                    try? data.write(to: folder.appendingPathComponent("\(shot.name).png"))
+                }
+            }
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// The window as a PNG with rounded corners and a soft shadow around it.
+    private static func capture(_ window: NSWindow) -> Data? {
+        guard let frame = window.contentView?.superview,
+              let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return nil }
+        frame.cacheDisplay(in: frame.bounds, to: rep)
+        guard let image = rep.cgImage else { return nil }
+
+        let scale = CGFloat(rep.pixelsWide) / frame.bounds.width
+        let margin = 56 * scale
+        let size = CGSize(width: CGFloat(rep.pixelsWide) + margin * 2, height: CGFloat(rep.pixelsHigh) + margin * 2)
+        guard let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        let rect = CGRect(x: margin, y: margin, width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh))
+        let shape = CGPath(roundedRect: rect, cornerWidth: 12 * scale, cornerHeight: 12 * scale, transform: nil)
+
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -14 * scale), blur: 34 * scale,
+                      color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.28))
+        ctx.addPath(shape)
+        ctx.setFillColor(CGColor(gray: 0.5, alpha: 1))
+        ctx.fillPath()
+        ctx.restoreGState()
+
+        ctx.addPath(shape)
+        ctx.clip()
+        ctx.draw(image, in: rect)
+        ctx.resetClip()
+        ctx.addPath(shape)
+        ctx.setStrokeColor(CGColor(gray: 0, alpha: 0.18))
+        ctx.setLineWidth(scale)
+        ctx.strokePath()
+
+        guard let result = ctx.makeImage() else { return nil }
+        return NSBitmapImageRep(cgImage: result).representation(using: .png, properties: [:])
+    }
+}
