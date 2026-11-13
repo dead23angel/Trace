@@ -102,10 +102,18 @@ public struct Tag: Codable, Identifiable, Hashable, Sendable,
 /// Another Mac whose records were brought in through the sync folder.
 public struct SyncedDevice: Codable, Identifiable, Hashable, Sendable, FetchableRecord, PersistableRecord {
     public var id: String
+    /// The name that Mac gave itself.
     public var name: String
     public var lastSeen: Date?
+    /// A name given to it on this Mac, shown instead of `name`.
+    public var alias: String?
 
     public static let databaseTableName = "device"
+
+    public var displayName: String {
+        if let alias, !alias.isEmpty { return alias }
+        return name
+    }
 
     public init(id: String, name: String, lastSeen: Date? = nil) {
         self.id = id

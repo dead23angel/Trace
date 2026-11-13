@@ -427,4 +427,31 @@ final class TraceCoreTests: XCTestCase {
         let apart = Lanes.assign([(t0, t0 + 10), (t0 + 10, t0 + 20)])
         XCTAssertEqual(apart.map(\.of), [1, 1])
     }
+
+    func testDeviceAliasSurvivesSyncAndReportSplitsByMac() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        let syncA = SyncEngine(store: a, folder: folder, deviceID: "mac-a", deviceName: "Studio", calendar: utc)
+        let syncB = SyncEngine(store: b, folder: folder, deviceID: "mac-b", deviceName: "Laptop", calendar: utc)
+        try a.heartbeat(xcode("A.swift"), at: t0)
+        try a.heartbeat(xcode("A.swift"), at: t0 + 60, pulse: 100)
+        try b.heartbeat(xcode("B.swift"), at: t0)
+        try b.heartbeat(xcode("B.swift"), at: t0 + 20, pulse: 100)
+        _ = try syncA.sync(now: t0 + 100)
+        _ = try syncB.sync(now: t0 + 100)
+
+        try b.renameDevice(id: "mac-a", to: " Lab ")
+        XCTAssertEqual(try b.devices().first?.displayName, "Lab")
+        try a.heartbeat(xcode("C.swift"), at: t0 + 70)
+        _ = try syncA.sync(now: t0 + 200)
+        _ = try syncB.sync(now: t0 + 200)
+        XCTAssertEqual(try b.devices().first?.displayName, "Lab")
+        try b.renameDevice(id: "mac-a", to: "")
+        XCTAssertEqual(try b.devices().first?.displayName, "Studio")
+
+        let range = DateInterval(start: t0 - 10, duration: 3600)
+        let report = Analyzer.report(try b.events(from: range.start, to: range.end), in: range, tagger: try b.tagger())
+        XCTAssertEqual(report.byDevice.map(\.label), ["mac-a", ""])
+        XCTAssertEqual(report.byDevice.map(\.seconds), [60, 20])
+    }
 }

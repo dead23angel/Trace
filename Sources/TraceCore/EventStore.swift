@@ -84,6 +84,9 @@ public final class EventStore: @unchecked Sendable {
                 try Self.setMeta(db, "taggingUpdated", String(Date().timeIntervalSince1970))
             }
         }
+        migrator.registerMigration("v4") { db in
+            try db.alter(table: "device") { t in t.add(column: "alias", .text) }
+        }
         try migrator.migrate(db)
         try seedPresetsIfNeeded()
     }
@@ -347,7 +350,23 @@ public final class EventStore: @unchecked Sendable {
     }
 
     func saveDevice(_ device: SyncedDevice) throws {
-        try db.write { db in try device.save(db) }
+        try db.write { db in
+            var device = device
+            // The name given here survives whatever the other Mac reports.
+            device.alias = try SyncedDevice.fetchOne(db, key: device.id)?.alias
+            try device.save(db)
+        }
+    }
+
+    /// Names another Mac on this Mac only. An empty name goes back to the
+    /// name that Mac gave itself.
+    public func renameDevice(id: String, to alias: String) throws {
+        try db.write { db in
+            guard var device = try SyncedDevice.fetchOne(db, key: id) else { return }
+            let trimmed = alias.trimmingCharacters(in: .whitespaces)
+            device.alias = trimmed.isEmpty || trimmed == device.name ? nil : trimmed
+            try device.update(db)
+        }
     }
 
     /// Other Macs whose records are in this database.

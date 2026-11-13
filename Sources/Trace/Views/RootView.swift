@@ -80,8 +80,14 @@ private struct Sidebar: View {
         switch model.deviceFilter {
         case nil: return L("All Macs")
         case "": return model.deviceName
-        case let id?: return model.devices.first { $0.id == id }?.name ?? id
+        case let id?: return model.deviceName(forDevice: id)
         }
+    }
+
+    /// A Mac's name followed by its time on the selected day.
+    private func menuTitle(_ name: String, device: String) -> String {
+        guard let seconds = model.deviceTotals[device], seconds >= 1 else { return name }
+        return "\(name)  –  \(Fmt.duration(seconds))"
     }
 
     var body: some View {
@@ -120,9 +126,9 @@ private struct Sidebar: View {
                 Menu {
                     Button(L("All Macs")) { model.deviceFilter = nil }
                     Divider()
-                    Button(model.deviceName + " · " + L("this Mac")) { model.deviceFilter = "" }
+                    Button(menuTitle(model.deviceName + " · " + L("this Mac"), device: "")) { model.deviceFilter = "" }
                     ForEach(model.devices) { device in
-                        Button(device.name) { model.deviceFilter = device.id }
+                        Button(menuTitle(device.displayName, device: device.id)) { model.deviceFilter = device.id }
                     }
                 } label: {
                     HStack(spacing: 10) {

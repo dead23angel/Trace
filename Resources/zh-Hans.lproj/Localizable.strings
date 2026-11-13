@@ -291,3 +291,5 @@
 "Stored in" = "保存位置";
 "Sync is off until you turn it on. Your records are then also stored in iCloud Drive as readable files, in a folder named Trace. Turning it off removes the other Macs' records from this Mac and leaves the files in place." = "同步默认关闭。开启后，记录会同时以可读文件的形式保存在 iCloud 云盘里名为 Trace 的文件夹中。关闭后，会从本机移除其他 Mac 的记录，云盘里的文件保留。";
 "Use another folder instead…" = "改用其他文件夹…";
+"By Mac" = "按设备";
+"Click a name to change it, for example Home and Lab" = "点名字可以修改，比如“家里”“实验室”";

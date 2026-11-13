@@ -36,7 +36,7 @@ struct ReportsView: View {
     }
 
     private var reloadKey: String {
-        "\(range.start.timeIntervalSince1970)-\(period.rawValue)-\(model.revision)"
+        "\(range.start.timeIntervalSince1970)-\(period.rawValue)-\(model.revision)-\(model.deviceFilter ?? "*")-\(model.lastSync?.timeIntervalSince1970 ?? 0)"
     }
 
     var body: some View {
@@ -67,6 +67,9 @@ struct ReportsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 HeatCard(report: report)
                 HStack(alignment: .top, spacing: 12) {
+                    if report.byDevice.count > 1 {
+                        DeviceCard(report: report)
+                    }
                     ListCard(title: L("Top sites"), rows: Array(report.sites.prefix(6)), mono: false,
                              empty: L("No web pages recorded"))
                     ListCard(title: L("Top files"), rows: report.files.prefix(6).map {
@@ -268,6 +271,35 @@ private struct HeatCard: View {
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(L("Active hours"))
+            }
+        }
+    }
+}
+
+/// How the period's time splits between Macs.
+private struct DeviceCard: View {
+    @EnvironmentObject private var model: AppModel
+    let report: RangeReport
+
+    var body: some View {
+        let top = report.byDevice.first?.seconds ?? 1
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionTitle(title: L("By Mac"))
+                ForEach(report.byDevice) { item in
+                    VStack(spacing: 5) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "laptopcomputer").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                            Text(model.deviceName(forDevice: item.label)).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(Fmt.duration(item.seconds)).foregroundStyle(Theme.muted)
+                            Text("\(Int((item.seconds / max(report.total, 1) * 100).rounded()))%")
+                                .fontWeight(.semibold)
+                                .frame(width: 36, alignment: .trailing)
+                        }
+                        Meter(fraction: item.seconds / top, color: Theme.accent)
+                    }
+                }
             }
         }
     }

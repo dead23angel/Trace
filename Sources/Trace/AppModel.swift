@@ -97,7 +97,19 @@ final class AppModel: ObservableObject {
 
     // Sync through a shared folder.
     private(set) var deviceID: String
-    let deviceName = Host.current().localizedName ?? "Mac"
+    /// This Mac's name as other Macs see it; the system's name unless changed.
+    @Published var deviceName: String {
+        didSet {
+            let trimmed = deviceName.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                UserDefaults.standard.removeObject(forKey: "deviceName")
+            } else {
+                UserDefaults.standard.set(trimmed, forKey: "deviceName")
+            }
+        }
+    }
+    /// Today's time per Mac, whatever the device filter; keyed by device id.
+    @Published private(set) var deviceTotals: [String: TimeInterval] = [:]
     @Published private(set) var syncFolder: String?
     @Published private(set) var lastSync: Date?
     @Published private(set) var syncError: String?
@@ -128,6 +140,7 @@ final class AppModel: ObservableObject {
             defaults.set(deviceID, forKey: "deviceID")
         }
         syncFolder = defaults.string(forKey: "syncFolder")
+        deviceName = defaults.string(forKey: "deviceName") ?? Host.current().localizedName ?? "Mac"
 
         // Launch arguments, used for demos and screenshots; they are not saved.
         let args = CommandLine.arguments
@@ -229,6 +242,15 @@ final class AppModel: ObservableObject {
         rules = (try? store.rules()) ?? []
         tagger = Tagger(tags: tags, rules: rules, manual: (try? store.manualTags()) ?? [])
         events = events(in: interval)
+        if devices.isEmpty {
+            deviceTotals = [:]
+        } else {
+            var totals: [String: TimeInterval] = [:]
+            for event in (try? store.events(from: interval.start, to: interval.end)) ?? [] {
+                totals[event.device, default: 0] += Analyzer.clipped(event, to: interval)
+            }
+            deviceTotals = totals
+        }
         summary = Analyzer.summarize(events, in: interval, tagger: tagger)
         blocks = Analyzer.blocks(events, in: interval, tagger: tagger)
         appRuns = Analyzer.appRuns(events, in: interval, tagger: tagger)
@@ -259,7 +281,13 @@ final class AppModel: ObservableObject {
     }
 
     func deviceName(forDevice id: String) -> String {
-        id.isEmpty ? deviceName : (devices.first { $0.id == id }?.name ?? id)
+        id.isEmpty ? deviceName : (devices.first { $0.id == id }?.displayName ?? id)
+    }
+
+    /// Names another Mac on this Mac only.
+    func renameDevice(_ device: SyncedDevice, to name: String) {
+        try? store.renameDevice(id: device.id, to: name)
+        devices = (try? store.devices()) ?? []
     }
 
     /// Whether `event` matches the search text and tag filter.
@@ -425,7 +453,8 @@ final class AppModel: ObservableObject {
     func syncNow() {
         guard !isDemo, !isSyncing, let path = syncFolder else { return }
         isSyncing = true
-        let (store, id, name) = (store, deviceID, deviceName)
+        let trimmed = deviceName.trimmingCharacters(in: .whitespaces)
+        let (store, id, name) = (store, deviceID, trimmed.isEmpty ? (Host.current().localizedName ?? "Mac") : trimmed)
         DispatchQueue.global(qos: .utility).async {
             let outcome: Result<SyncEngine.Result, Error> = Result {
                 try SyncEngine(store: store, folder: URL(fileURLWithPath: path, isDirectory: true),

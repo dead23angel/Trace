@@ -317,7 +317,8 @@ private struct BlockTile: View {
                     Text(block.title).fontWeight(.semibold).lineLimit(1)
                 }
                 if height >= 36 {
-                    Text("\(Fmt.time(block.start)) – \(Fmt.time(block.end)) · \(Fmt.duration(block.duration))")
+                    Text((model.devices.isEmpty ? "" : model.deviceName(forDevice: block.device) + " · ")
+                         + "\(Fmt.time(block.start)) – \(Fmt.time(block.end)) · \(Fmt.duration(block.duration))")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
                         .lineLimit(1)

@@ -174,12 +174,15 @@ struct SettingsView: View {
                     .disabled(model.isSyncing)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("Macs")).fontWeight(.semibold)
-                deviceRow(name: model.deviceName, note: L("this Mac"))
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(L("Macs")).fontWeight(.semibold)
+                    Text(L("Click a name to change it, for example Home and Lab"))
+                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                }
+                deviceRow(name: $model.deviceName, placeholder: Host.current().localizedName ?? "Mac",
+                          note: L("this Mac")) { model.syncNow() }
                 ForEach(model.devices) { device in
-                    deviceRow(name: device.name, note: device.lastSeen.map {
-                        String(format: L("last synced %@"), Fmt.dateTime($0))
-                    } ?? "")
+                    DeviceNameRow(device: device)
                 }
             }
             if !usesICloud {
@@ -208,10 +211,16 @@ struct SettingsView: View {
         return model.isSyncing ? L("Syncing…") : L("Not synced yet")
     }
 
-    private func deviceRow(name: String, note: String) -> some View {
+    private func deviceRow(name: Binding<String>, placeholder: String, note: String,
+                           commit: @escaping () -> Void) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "laptopcomputer").foregroundStyle(Theme.muted).frame(width: 20)
-            Text(name)
+            TextField(placeholder, text: name)
+                .textFieldStyle(.plain)
+                .onSubmit(commit)
+                .padding(.horizontal, 8)
+                .frame(width: 220, height: 26)
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.line))
             Spacer()
             Text(note).font(.system(size: 12)).foregroundStyle(Theme.muted)
         }
@@ -273,5 +282,34 @@ struct SettingsView: View {
     private static func appName(_ bundleID: String) -> String {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+    }
+}
+
+/// One other Mac in the Sync pane, with a name that can be changed here.
+private struct DeviceNameRow: View {
+    @EnvironmentObject private var model: AppModel
+    let device: SyncedDevice
+    @State private var name = ""
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "laptopcomputer").foregroundStyle(Theme.muted).frame(width: 20)
+            TextField(device.name, text: $name)
+                .textFieldStyle(.plain)
+                .onSubmit { model.renameDevice(device, to: name) }
+                .padding(.horizontal, 8)
+                .frame(width: 220, height: 26)
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.line))
+            if name != device.displayName {
+                Button(L("Save")) { model.renameDevice(device, to: name) }
+                    .buttonStyle(TRButtonStyle(kind: .bordered, height: 26))
+            }
+            Spacer()
+            Text(device.lastSeen.map { String(format: L("last synced %@"), Fmt.dateTime($0)) } ?? "")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.muted)
+        }
+        .onAppear { name = device.displayName }
+        .onChange(of: device.displayName) { name = device.displayName }
     }
 }

@@ -147,6 +147,8 @@ public struct RangeReport: Sendable {
     public var heat: [HeatCell] = []
     public var sites: [ItemTotal] = []
     public var files: [ItemTotal] = []
+    /// Time per Mac; the label is the device identifier, empty for this Mac.
+    public var byDevice: [ItemTotal] = []
     public init() {}
 
     public var activeDays: Int { days.filter { $0.total > 0 }.count }
@@ -268,8 +270,10 @@ public enum Analyzer {
         var heat: [Int: TimeInterval] = [:]
         var sites: [String: TimeInterval] = [:]
         var files: [String: TimeInterval] = [:]
+        var perDevice: [String: TimeInterval] = [:]
         for e in events {
             guard let span = clip(e, to: range) else { continue }
+            perDevice[e.device, default: 0] += span.duration
             let tag = tagger.primary(for: e)
             let tagID = tag?.id ?? 0
             if let tag { tagByID[tagID] = tag }
@@ -298,6 +302,7 @@ public enum Analyzer {
         }
         report.heat = heat.map { HeatCell(weekday: $0.key / 24, hour: $0.key % 24, seconds: $0.value) }
         report.sites = sites.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
+        report.byDevice = perDevice.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
         report.files = files.map { ItemTotal(label: $0.key, seconds: $0.value) }.sorted { $0.seconds > $1.seconds }
         return report
     }
