@@ -291,6 +291,9 @@ private struct Inspector: View {
             Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 8) {
                 field(L("App")) { Text(event.appName) }
                 field(L("Type")) { Text(event.kindName) }
+                if !model.devices.isEmpty {
+                    field(L("Mac")) { Text(model.deviceName(for: event)) }
+                }
                 if let path = event.path, !path.isEmpty {
                     field(L("Path")) {
                         Text(Analyzer.abbreviate(path)).font(Theme.mono).textSelection(.enabled)

@@ -6,7 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
 
     private enum Tab: String, CaseIterable, Identifiable {
-        case general, recording, privacy, data
+        case general, recording, privacy, sync, data
         var id: String { rawValue }
 
         var title: String {
@@ -14,6 +14,7 @@ struct SettingsView: View {
             case .general: return L("General")
             case .recording: return L("What is recorded")
             case .privacy: return L("Privacy and exclusions")
+            case .sync: return L("Sync")
             case .data: return L("Data and export")
             }
         }
@@ -53,10 +54,13 @@ struct SettingsView: View {
                 case .general: general
                 case .recording: recording
                 case .privacy: privacy
+                case .sync: sync
                 case .data: data
                 }
                 Spacer(minLength: 0)
-                Text(L("All data stays on this Mac. Trace never connects to the network."))
+                Text(model.syncFolder == nil
+                     ? L("All data stays on this Mac. Trace never connects to the network.")
+                     : L("Trace itself never connects to the network. Records are also written to your sync folder."))
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
             }
@@ -138,6 +142,67 @@ struct SettingsView: View {
                     Hairline()
                 }
             }
+        }
+    }
+
+    @ViewBuilder private var sync: some View {
+        if let folder = model.syncFolder {
+            row(L("Sync folder"), Analyzer.abbreviate(folder), mono: true) {
+                Button(L("Show in Finder")) {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: folder)])
+                }
+                .buttonStyle(.trBordered)
+            }
+            row(L("Status"), syncStatus) {
+                Button(model.isSyncing ? L("Syncing…") : L("Sync now")) { model.syncNow() }
+                    .buttonStyle(.trBordered)
+                    .disabled(model.isSyncing)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("Macs")).fontWeight(.semibold)
+                deviceRow(name: model.deviceName, note: L("this Mac"))
+                ForEach(model.devices) { device in
+                    deviceRow(name: device.name, note: device.lastSeen.map {
+                        String(format: L("last synced %@"), Fmt.dateTime($0))
+                    } ?? "")
+                }
+            }
+            Hairline()
+            row(L("Stop syncing"), L("Removes the other Macs' records from this Mac. The files in the folder are kept."), last: true) {
+                Button(L("Stop syncing")) { model.disableSync() }.buttonStyle(.trBordered)
+            }
+        } else {
+            Text(L("Keep several Macs in step, or keep a copy of your records, through a folder that is synced for you: iCloud Drive, Dropbox, a network drive. Each Mac writes its own records there and reads the others'. Tags and rules are shared."))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                if let folder = model.iCloudFolder {
+                    Button(L("Use iCloud Drive")) { model.enableSync(folder: folder) }.buttonStyle(.trProminent)
+                }
+                Button(L("Choose folder…")) { model.chooseSyncFolder() }.buttonStyle(.trBordered)
+            }
+            if let error = model.syncError {
+                Text(error).font(.system(size: 12)).foregroundStyle(Palette.color(4))
+            }
+            Text(L("Sync is off by default. When it is on, your records are stored in that folder as readable files, so anyone who can open the folder can read them."))
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var syncStatus: String {
+        if let error = model.syncError { return error }
+        if let last = model.lastSync { return String(format: L("Last synced %@"), Fmt.time(last)) }
+        return model.isSyncing ? L("Syncing…") : L("Not synced yet")
+    }
+
+    private func deviceRow(name: String, note: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "laptopcomputer").foregroundStyle(Theme.muted).frame(width: 20)
+            Text(name)
+            Spacer()
+            Text(note).font(.system(size: 12)).foregroundStyle(Theme.muted)
         }
     }
 

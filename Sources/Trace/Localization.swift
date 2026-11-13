@@ -93,6 +93,13 @@ enum Fmt {
         return f.shortStandaloneMonthSymbols ?? (1...12).map(String.init)
     }
 
+    static func dateTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = L10n.locale
+        f.setLocalizedDateFormatFromTemplate("MMMd HH:mm")
+        return f.string(from: date)
+    }
+
     static func day(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = L10n.locale

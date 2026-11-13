@@ -95,6 +95,19 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
 
+    // Sync through a shared folder.
+    private(set) var deviceID: String
+    let deviceName = Host.current().localizedName ?? "Mac"
+    @Published private(set) var syncFolder: String?
+    @Published private(set) var lastSync: Date?
+    @Published private(set) var syncError: String?
+    @Published private(set) var isSyncing = false
+    /// Other Macs whose records are in the database.
+    @Published private(set) var devices: [SyncedDevice] = []
+    /// Which Mac's records to show: nil for all, "" for this Mac, else a device id.
+    @Published var deviceFilter: String? { didSet { reload() } }
+    private var syncTimer: Timer?
+
     private var refresh: Timer?
 
     init() {
@@ -108,6 +121,14 @@ final class AppModel: ObservableObject {
         captureFiles = defaults.bool(forKey: "captureFiles")
         captureURLs = defaults.bool(forKey: "captureURLs")
         excludedApps = defaults.stringArray(forKey: "excludedApps") ?? []
+        if let id = defaults.string(forKey: "deviceID") {
+            deviceID = id
+        } else {
+            deviceID = UUID().uuidString.lowercased()
+            defaults.set(deviceID, forKey: "deviceID")
+        }
+        syncFolder = defaults.string(forKey: "syncFolder")
+
         // Launch arguments, used for demos and screenshots; they are not saved.
         let args = CommandLine.arguments
         func value(after flag: String) -> String? {
@@ -118,6 +139,11 @@ final class AppModel: ObservableObject {
         if let override = value(after: "--language").flatMap(AppLanguage.init(rawValue:)) { language = override }
         if let override = value(after: "--appearance").flatMap(Appearance.init(rawValue:)) { appearance = override }
         showsOnboarding = !demo && !defaults.bool(forKey: "onboarded")
+        // For trying sync without touching real data: a separate database
+        // folder, sync folder and device identity for this run only.
+        let dataDir = value(after: "--data-dir")
+        if let override = value(after: "--sync-folder") { syncFolder = override }
+        if let override = value(after: "--device-id") { deviceID = override }
 
         // Keep data in Application Support; fall back to memory if that fails
         // so the app still opens and can say what went wrong.
@@ -125,7 +151,8 @@ final class AppModel: ObservableObject {
         var opened: EventStore?
         if !demo, let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                       appropriateFor: nil, create: true) {
-            let folder = support.appendingPathComponent("Trace", isDirectory: true)
+            let folder = dataDir.map { URL(fileURLWithPath: $0, isDirectory: true) }
+                ?? support.appendingPathComponent("Trace", isDirectory: true)
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let file = folder.appendingPathComponent("trace.sqlite")
             if let store = try? EventStore(path: file.path) {
@@ -150,8 +177,17 @@ final class AppModel: ObservableObject {
                                         path: last.path, url: last.url), since: last.start)
             }
         }
+        devices = (try? store.devices()) ?? []
         reload()
-        if !demo { watcher.start() }
+        if !demo {
+            watcher.start()
+            let sync = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.syncNow() }
+            }
+            RunLoop.main.add(sync, forMode: .common)
+            syncTimer = sync
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.syncNow() }
+        }
 
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.reloadIfToday() }
@@ -192,7 +228,7 @@ final class AppModel: ObservableObject {
         tags = (try? store.tags()) ?? []
         rules = (try? store.rules()) ?? []
         tagger = Tagger(tags: tags, rules: rules, manual: (try? store.manualTags()) ?? [])
-        events = (try? store.events(from: interval.start, to: interval.end)) ?? []
+        events = events(in: interval)
         summary = Analyzer.summarize(events, in: interval, tagger: tagger)
         blocks = Analyzer.blocks(events, in: interval, tagger: tagger)
         appRuns = Analyzer.appRuns(events, in: interval, tagger: tagger)
@@ -212,7 +248,14 @@ final class AppModel: ObservableObject {
     }
 
     func events(in range: DateInterval) -> [ActivityEvent] {
-        (try? store.events(from: range.start, to: range.end)) ?? []
+        let all = (try? store.events(from: range.start, to: range.end)) ?? []
+        guard let deviceFilter else { return all }
+        return all.filter { $0.device == deviceFilter }
+    }
+
+    /// Name of the Mac an event was recorded on.
+    func deviceName(for event: ActivityEvent) -> String {
+        event.isLocal ? deviceName : (devices.first { $0.id == event.device }?.name ?? event.device)
     }
 
     /// Whether `event` matches the search text and tag filter.
@@ -327,6 +370,77 @@ final class AppModel: ObservableObject {
     func eraseAllRecords() {
         try? store.deleteAllEvents()
         reload()
+    }
+
+    // MARK: Sync
+
+    /// A "Trace" folder in iCloud Drive, when iCloud Drive is set up on this Mac.
+    var iCloudFolder: URL? {
+        let drive = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: drive.path) else { return nil }
+        return drive.appendingPathComponent("Trace", isDirectory: true)
+    }
+
+    func chooseSyncFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = L("Use this folder")
+        panel.directoryURL = iCloudFolder?.deletingLastPathComponent()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        enableSync(folder: url)
+    }
+
+    func enableSync(folder: URL) {
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            syncError = error.localizedDescription
+            return
+        }
+        syncFolder = folder.path
+        UserDefaults.standard.set(folder.path, forKey: "syncFolder")
+        syncNow()
+    }
+
+    /// Stops syncing and forgets the other Macs' records here. The files in
+    /// the folder stay, so turning sync on again brings everything back.
+    func disableSync() {
+        syncFolder = nil
+        UserDefaults.standard.removeObject(forKey: "syncFolder")
+        try? store.removeRemoteData()
+        devices = []
+        deviceFilter = nil
+        lastSync = nil
+        syncError = nil
+        reload()
+    }
+
+    func syncNow() {
+        guard !isDemo, !isSyncing, let path = syncFolder else { return }
+        isSyncing = true
+        let (store, id, name) = (store, deviceID, deviceName)
+        DispatchQueue.global(qos: .utility).async {
+            let outcome: Result<SyncEngine.Result, Error> = Result {
+                try SyncEngine(store: store, folder: URL(fileURLWithPath: path, isDirectory: true),
+                               deviceID: id, deviceName: name).sync()
+            }
+            DispatchQueue.main.async {
+                self.isSyncing = false
+                switch outcome {
+                case .success(let result):
+                    self.lastSync = Date()
+                    self.syncError = nil
+                    self.devices = (try? store.devices()) ?? []
+                    if result.appliedTagging { self.revision += 1 }
+                    if result.importedDays > 0 || result.appliedTagging { self.reload() }
+                case .failure(let error):
+                    self.syncError = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: Settings

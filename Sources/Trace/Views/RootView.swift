@@ -76,6 +76,14 @@ struct Page<Content: View>: View {
 private struct Sidebar: View {
     @EnvironmentObject private var model: AppModel
 
+    private var deviceLabel: String {
+        switch model.deviceFilter {
+        case nil: return L("All Macs")
+        case "": return model.deviceName
+        case let id?: return model.devices.first { $0.id == id }?.name ?? id
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 10) {
@@ -106,6 +114,33 @@ private struct Sidebar: View {
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(isOn ? .isSelected : [])
                 }
+            }
+
+            if !model.devices.isEmpty {
+                Menu {
+                    Button(L("All Macs")) { model.deviceFilter = nil }
+                    Divider()
+                    Button(model.deviceName + " · " + L("this Mac")) { model.deviceFilter = "" }
+                    ForEach(model.devices) { device in
+                        Button(device.name) { model.deviceFilter = device.id }
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "laptopcomputer").font(.system(size: 12, weight: .medium)).frame(width: 16)
+                        Text(deviceLabel).fontWeight(.medium).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundStyle(Theme.muted)
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Theme.line))
+                    .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("Show records from"))
             }
 
             if !model.summary.byTag.isEmpty {

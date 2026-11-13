@@ -52,6 +52,10 @@ A week, a month or a year at a glance: time per day stacked by tag, the hours yo
 
 ![Weekly report with daily totals, a heat map and top sites and files](docs/screenshots/reports.png)
 
+### Several Macs, one picture
+
+Sync is optional and off by default. Point Trace at a folder that is kept in sync for you (iCloud Drive, Dropbox, a network drive) and each Mac writes its own records there and reads the others'. Tags and rules are shared, and you can look at all Macs together or one at a time. The files are plain text, so the folder doubles as a backup.
+
 ### Made for the Mac
 
 Native SwiftUI, light and dark appearance, English and Simplified Chinese (switchable without restarting), a menu bar panel with today's total, and launch at login.
@@ -62,7 +66,8 @@ Native SwiftUI, light and dark appearance, English and Simplified Chinese (switc
 
 ## Privacy
 
-- **Local only.** Everything is stored in one SQLite file at `~/Library/Application Support/Trace/trace.sqlite`. Trace makes no network connections and has no account.
+- **Local by default.** Everything is stored in one SQLite file at `~/Library/Application Support/Trace/trace.sqlite`. Trace makes no network connections and has no account.
+- **Sync only if you turn it on.** With a sync folder set, your records are also written there as readable files, and whatever syncs that folder carries them. Anyone who can open the folder can read them. Turn sync off and Trace stops writing to it.
 - **No keystrokes, no screenshots.** Trace reads the name of the app in front and, through the macOS Accessibility API, the title, document path and page address of its focused window. Nothing else.
 - **URLs without the sensitive part.** Query strings, fragments and credentials are removed before a URL is stored.
 - **You choose what is recorded.** Window titles, file paths and web addresses can each be turned off, and any app can be excluded completely.
@@ -107,6 +112,7 @@ Useful commands:
 | Capture | `Sources/Trace/Capture` | Reads the frontmost app from `NSWorkspace`, the focused window through the Accessibility API, and idle time from `CGEventSource`, every two seconds. |
 | Storage | `Sources/TraceCore/EventStore.swift` | SQLite via [GRDB](https://github.com/groue/GRDB.swift). Consecutive identical samples extend one event, so there is one row per stay. Idle time is not stored; it appears as gaps. |
 | Tagging | `Sources/TraceCore/Tagging.swift` | Rules match on app, app category, file path, URL or window title. Tags added or removed by hand on a single record override the rules. |
+| Sync | `Sources/TraceCore/SyncEngine.swift` | Each Mac writes one file per day into its own subfolder of the sync folder and reads the other Macs' files, so two Macs never edit the same file. For tags and rules the most recent edit wins. |
 | Analysis | `Sources/TraceCore/Analyzer.swift` | Day summary, sessions, the drill-down outline, reports and CSV export. |
 | Interface | `Sources/Trace/Views` | SwiftUI. Colours and shared controls live in `Theme.swift`. |
 
@@ -121,6 +127,8 @@ Copy `Resources/zh-Hans.lproj` to `Resources/<code>.lproj`, translate the right-
 - Watching a video without touching the keyboard or mouse counts as away once the idle time has passed.
 - Private browsing windows are not detected and are recorded like any other window. Exclude the browser or turn off web addresses if that matters to you.
 - Page addresses depend on what each browser exposes to the Accessibility API. Safari and Chromium-based browsers (Chrome, Edge, Arc, Brave) are covered; others may only report the window title.
+
+- With sync on, time is not de-duplicated across Macs: if two Macs are in use at the same moment, both count. Tags added by hand to a single record stay on the Mac where they were added.
 
 ## Contributing
 

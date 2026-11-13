@@ -278,4 +278,127 @@ final class TraceCoreTests: XCTestCase {
         XCTAssertEqual(Set(today.compactMap { tagger.primary(for: $0)?.key }), ["dev", "comm"])
         XCTAssertEqual(today.first?.path, "/Users/me/Developer/Trace/Sources/Trace/Views/TimelineView.swift")
     }
+
+    // MARK: Sync
+
+    private func tempFolder() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("trace-sync-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    func testSyncCopiesRecordsBetweenTwoMacs() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        let syncA = SyncEngine(store: a, folder: folder, deviceID: "mac-a", deviceName: "Studio", calendar: utc)
+        let syncB = SyncEngine(store: b, folder: folder, deviceID: "mac-b", deviceName: "Laptop", calendar: utc)
+
+        try a.heartbeat(xcode("A.swift"), at: t0)
+        try a.heartbeat(xcode("A.swift"), at: t0 + 10)
+        try b.heartbeat(xcode("B.swift"), at: t0 + 100)
+        XCTAssertEqual(try syncA.sync(now: t0 + 200).exportedDays, 1)
+        let first = try syncB.sync(now: t0 + 200)
+        XCTAssertEqual(first.importedDays, 1)
+
+        let inB = try b.events(from: t0 - 1, to: t0 + 1000)
+        XCTAssertEqual(inB.map(\.title), ["A.swift", "B.swift"])
+        XCTAssertEqual(inB.map(\.device), ["mac-a", ""])
+        XCTAssertEqual(inB[0].duration, 10, accuracy: 0.001)
+        XCTAssertEqual(try b.devices().map(\.name), ["Studio"])
+
+        // Nothing changed: nothing is read again and nothing is duplicated.
+        XCTAssertEqual(try syncB.sync(now: t0 + 300).importedDays, 0)
+        XCTAssertEqual(try b.eventCount(), 2)
+
+        // A sees B's record after its next sync, and still has one copy of its own.
+        _ = try syncA.sync(now: t0 + 400)
+        XCTAssertEqual(try a.events(from: t0 - 1, to: t0 + 1000).map(\.device), ["", "mac-b"])
+    }
+
+    func testSyncFollowsChangesAndDeletions() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        let syncA = SyncEngine(store: a, folder: folder, deviceID: "mac-a", deviceName: "Studio", calendar: utc)
+        let syncB = SyncEngine(store: b, folder: folder, deviceID: "mac-b", deviceName: "Laptop", calendar: utc)
+
+        try a.heartbeat(xcode("A.swift"), at: t0)
+        try a.heartbeat(xcode("B.swift"), at: t0 + 60)
+        _ = try syncA.sync(now: t0 + 100)
+        _ = try syncB.sync(now: t0 + 100)
+        XCTAssertEqual(try b.eventCount(), 2)
+
+        // The record grows on A: B replaces its copy instead of adding one.
+        try a.heartbeat(xcode("B.swift"), at: t0 + 70)
+        try a.heartbeat(xcode("C.swift"), at: t0 + 80)
+        _ = try syncA.sync(now: t0 + 200)
+        XCTAssertEqual(try syncB.sync(now: t0 + 200).importedDays, 1)
+        XCTAssertEqual(try b.events(from: t0 - 1, to: t0 + 1000).map(\.title), ["A.swift", "B.swift", "C.swift"])
+
+        // Deleting on A removes it on B.
+        let doomed = try XCTUnwrap(a.events(from: t0 - 1, to: t0 + 1000).first { $0.title == "A.swift" })
+        try a.deleteEvent(id: doomed.id!, calendar: utc)
+        _ = try syncA.sync(now: t0 + 300)
+        _ = try syncB.sync(now: t0 + 300)
+        XCTAssertEqual(try b.events(from: t0 - 1, to: t0 + 1000).map(\.title), ["B.swift", "C.swift"])
+
+        // Erasing everything on A empties its folder; B drops A's records.
+        try a.deleteAllEvents()
+        _ = try syncA.sync(now: t0 + 400)
+        _ = try syncB.sync(now: t0 + 400)
+        XCTAssertEqual(try b.eventCount(), 0)
+    }
+
+    func testHeartbeatIgnoresRecordsFromOtherMacs() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        try b.heartbeat(xcode("B.swift"), at: t0)
+        try a.heartbeat(xcode("A.swift"), at: t0 + 5)
+        _ = try SyncEngine(store: a, folder: folder, deviceID: "mac-a", deviceName: "A", calendar: utc).sync(now: t0 + 6)
+        _ = try SyncEngine(store: b, folder: folder, deviceID: "mac-b", deviceName: "B", calendar: utc).sync(now: t0 + 6)
+
+        // The imported record has the newest id, but B keeps extending its own.
+        try b.heartbeat(xcode("B.swift"), at: t0 + 8)
+        let own = try b.events(from: t0 - 1, to: t0 + 100).filter(\.isLocal)
+        XCTAssertEqual(own.count, 1)
+        XCTAssertEqual(own[0].duration, 8, accuracy: 0.001)
+    }
+
+    func testSyncSharesTagsAndRulesNewestWins() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        let syncA = SyncEngine(store: a, folder: folder, deviceID: "mac-a", deviceName: "A", calendar: utc)
+        let syncB = SyncEngine(store: b, folder: folder, deviceID: "mac-b", deviceName: "B", calendar: utc)
+
+        // Untouched presets are not published.
+        _ = try syncA.sync(now: t0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("tagging.json").path))
+
+        let thesis = try a.addTag(name: "Thesis", colorIndex: 1, rule: (.path, .contains, "/thesis/"))
+        _ = try syncA.sync(now: t0)
+        XCTAssertTrue(try syncB.sync(now: t0).appliedTagging)
+        let inB = try XCTUnwrap(b.tags().first { $0.name == "Thesis" })
+        XCTAssertEqual(try b.rules().filter { $0.tagID == inB.id }.map(\.value), ["/thesis/"])
+        XCTAssertEqual(try b.tags().count, try a.tags().count)
+
+        // A later edit on B travels back to A, and A keeps the same tag row.
+        Thread.sleep(forTimeInterval: 1.1)
+        try b.addRule(tagID: inB.id!, field: .app, op: .equals, value: "Zotero")
+        XCTAssertFalse(try syncB.sync(now: t0).appliedTagging)
+        XCTAssertTrue(try syncA.sync(now: t0).appliedTagging)
+        XCTAssertEqual(try a.rules().filter { $0.tagID == thesis.id }.map(\.value).sorted(), ["/thesis/", "Zotero"])
+
+        // Deleting the tag on A removes it on B.
+        Thread.sleep(forTimeInterval: 1.1)
+        try a.deleteTag(id: thesis.id!)
+        _ = try syncA.sync(now: t0)
+        _ = try syncB.sync(now: t0)
+        XCTAssertNil(try b.tags().first { $0.name == "Thesis" })
+    }
 }

@@ -33,8 +33,14 @@ public struct ActivityEvent: Codable, Identifiable, Equatable, Sendable,
     public var title: String
     public var path: String?
     public var url: String?
+    /// Identifier of the Mac the event was recorded on; empty for this Mac.
+    public var device: String = ""
+    /// For events from another Mac: the day file they came from.
+    public var syncDay: String?
 
     public static let databaseTableName = "event"
+
+    public var isLocal: Bool { device.isEmpty }
 
     public init(sample: Sample, start: Date, end: Date) {
         self.start = start
@@ -91,6 +97,43 @@ public struct Tag: Codable, Identifiable, Hashable, Sendable,
     }
 
     public var isPreset: Bool { key != nil }
+}
+
+/// Another Mac whose records were brought in through the sync folder.
+public struct SyncedDevice: Codable, Identifiable, Hashable, Sendable, FetchableRecord, PersistableRecord {
+    public var id: String
+    public var name: String
+    public var lastSeen: Date?
+
+    public static let databaseTableName = "device"
+
+    public init(id: String, name: String, lastSeen: Date? = nil) {
+        self.id = id
+        self.name = name
+        self.lastSeen = lastSeen
+    }
+}
+
+/// Tags and rules in a form that can be written to a file and applied on
+/// another Mac. Presets are matched by key, custom tags by name.
+public struct TaggingSnapshot: Codable, Equatable, Sendable {
+    public struct RuleEntry: Codable, Equatable, Sendable {
+        public var field: RuleField
+        public var op: RuleOp
+        public var value: String
+    }
+
+    public struct TagEntry: Codable, Equatable, Sendable {
+        public var key: String?
+        public var name: String
+        public var colorIndex: Int
+        public var enabled: Bool
+        public var sortOrder: Int
+        public var rules: [RuleEntry]
+    }
+
+    public var updated: Date
+    public var tags: [TagEntry]
 }
 
 /// A tag the user put on, or took off, one specific event by hand.

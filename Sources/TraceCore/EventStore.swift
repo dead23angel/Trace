@@ -56,6 +56,34 @@ public final class EventStore: @unchecked Sendable {
                 t.primaryKey(["eventID", "tagID"])
             }
         }
+        migrator.registerMigration("v3") { db in
+            try db.alter(table: "event") { t in
+                t.add(column: "device", .text).notNull().defaults(to: "")
+                t.add(column: "syncDay", .text)
+            }
+            try db.create(index: "event_on_device", on: "event", columns: ["device", "syncDay"])
+            try db.create(table: "device") { t in
+                t.primaryKey("id", .text)
+                t.column("name", .text).notNull()
+                t.column("lastSeen", .datetime)
+            }
+            // What has been read from each other Mac's day files.
+            try db.create(table: "syncState") { t in
+                t.column("device", .text).notNull()
+                t.column("day", .text).notNull()
+                t.column("stamp", .text).notNull()
+                t.primaryKey(["device", "day"])
+            }
+            try db.create(table: "meta") { t in
+                t.primaryKey("key", .text)
+                t.column("value", .text).notNull()
+            }
+            // A database that already has tags may have been customised, so
+            // its tagging counts as edited now; a brand-new one does not.
+            if try Tag.fetchCount(db) > 0 {
+                try Self.setMeta(db, "taggingUpdated", String(Date().timeIntervalSince1970))
+            }
+        }
         try migrator.migrate(db)
         try seedPresetsIfNeeded()
     }
@@ -70,7 +98,7 @@ public final class EventStore: @unchecked Sendable {
     @discardableResult
     public func heartbeat(_ sample: Sample, at now: Date, pulse: TimeInterval = 15) throws -> ActivityEvent {
         try db.write { db in
-            if var last = try ActivityEvent.order(Column("id").desc).fetchOne(db),
+            if var last = try ActivityEvent.filter(Column("device") == "").order(Column("id").desc).fetchOne(db),
                last.matches(sample),
                now >= last.end,
                now.timeIntervalSince(last.end) <= pulse {
@@ -88,7 +116,7 @@ public final class EventStore: @unchecked Sendable {
     /// have been idle since then.
     public func trimLast(to date: Date) throws {
         try db.write { db in
-            guard var last = try ActivityEvent.order(Column("id").desc).fetchOne(db),
+            guard var last = try ActivityEvent.filter(Column("device") == "").order(Column("id").desc).fetchOne(db),
                   last.end > date else { return }
             last.end = max(last.start, date)
             try last.update(db)
@@ -112,8 +140,18 @@ public final class EventStore: @unchecked Sendable {
         }
     }
 
-    public func deleteEvent(id: Int64) throws {
-        _ = try db.write { db in try ActivityEvent.deleteOne(db, key: id) }
+    /// Deletes one event. For an event of this Mac, its day is remembered so
+    /// that the next sync rewrites that day's file.
+    public func deleteEvent(id: Int64, calendar: Calendar = .current) throws {
+        try db.write { db in
+            guard let event = try ActivityEvent.fetchOne(db, key: id) else { return }
+            try event.delete(db)
+            if event.isLocal {
+                var days = Set((try Self.meta(db, "dirtyDays") ?? "").split(separator: ",").map(String.init))
+                days.insert(SyncEngine.dayKey(event.start, calendar: calendar))
+                try Self.setMeta(db, "dirtyDays", days.sorted().joined(separator: ","))
+            }
+        }
     }
 
     public func eventCount() throws -> Int {
@@ -135,6 +173,7 @@ public final class EventStore: @unchecked Sendable {
             guard var tag = try Tag.fetchOne(db, key: id) else { return }
             tag.enabled = enabled
             try tag.update(db)
+            try Self.touchTagging(db)
         }
     }
 
@@ -152,12 +191,16 @@ public final class EventStore: @unchecked Sendable {
                                   value: rule.value.trimmingCharacters(in: .whitespaces))
                 try record.insert(db)
             }
+            try Self.touchTagging(db)
             return tag
         }
     }
 
     public func deleteTag(id: Int64) throws {
-        _ = try db.write { db in try Tag.deleteOne(db, key: id) }
+        try db.write { db in
+            _ = try Tag.deleteOne(db, key: id)
+            try Self.touchTagging(db)
+        }
     }
 
     @discardableResult
@@ -167,12 +210,16 @@ public final class EventStore: @unchecked Sendable {
         return try db.write { db in
             var rule = Rule(tagID: tagID, field: field, op: op, value: trimmed)
             try rule.insert(db)
+            try Self.touchTagging(db)
             return rule
         }
     }
 
     public func deleteRule(id: Int64) throws {
-        _ = try db.write { db in try Rule.deleteOne(db, key: id) }
+        try db.write { db in
+            _ = try Rule.deleteOne(db, key: id)
+            try Self.touchTagging(db)
+        }
     }
 
     /// Moves a tag up (negative `delta`) or down in priority. When several
@@ -189,6 +236,7 @@ public final class EventStore: @unchecked Sendable {
                 tag.sortOrder = order
                 try tag.update(db)
             }
+            try Self.touchTagging(db)
         }
     }
 
@@ -215,8 +263,148 @@ public final class EventStore: @unchecked Sendable {
         }
     }
 
+    /// Removes every event, including those brought in from other Macs. With
+    /// sync on, this Mac's files are emptied and the others are read again.
     public func deleteAllEvents() throws {
-        _ = try db.write { db in try ActivityEvent.deleteAll(db) }
+        try db.write { db in
+            _ = try ActivityEvent.deleteAll(db)
+            try db.execute(sql: "DELETE FROM syncState")
+            try Self.setMeta(db, "fullExport", "1")
+        }
+    }
+
+    // MARK: Sync support
+
+    static func meta(_ db: Database, _ key: String) throws -> String? {
+        try String.fetchOne(db, sql: "SELECT value FROM meta WHERE key = ?", arguments: [key])
+    }
+
+    static func setMeta(_ db: Database, _ key: String, _ value: String?) throws {
+        if let value {
+            try db.execute(sql: "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                           arguments: [key, value])
+        } else {
+            try db.execute(sql: "DELETE FROM meta WHERE key = ?", arguments: [key])
+        }
+    }
+
+    private static func touchTagging(_ db: Database) throws {
+        try setMeta(db, "taggingUpdated", String(Date().timeIntervalSince1970))
+    }
+
+    func meta(_ key: String) throws -> String? {
+        try db.read { db in try Self.meta(db, key) }
+    }
+
+    func setMeta(_ key: String, _ value: String?) throws {
+        try db.write { db in try Self.setMeta(db, key, value) }
+    }
+
+    /// Events recorded on this Mac that start inside `[from, to)`.
+    func localEvents(startingFrom from: Date, to: Date) throws -> [ActivityEvent] {
+        try db.read { db in
+            try ActivityEvent
+                .filter(Column("device") == "" && Column("start") >= from && Column("start") < to)
+                .order(Column("start"))
+                .fetchAll(db)
+        }
+    }
+
+    func firstLocalStart() throws -> Date? {
+        try db.read { db in
+            try ActivityEvent.filter(Column("device") == "").order(Column("start")).fetchOne(db)?.start
+        }
+    }
+
+    /// Replaces what is stored for one day of another Mac. `events == nil`
+    /// means the day file is gone.
+    func replaceRemote(device: String, day: String, stamp: String?, with events: [ActivityEvent]?) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM event WHERE device = ? AND syncDay = ?", arguments: [device, day])
+            for var event in events ?? [] {
+                event.id = nil
+                event.device = device
+                event.syncDay = day
+                try event.insert(db)
+            }
+            if let stamp, events != nil {
+                try db.execute(sql: "INSERT INTO syncState (device, day, stamp) VALUES (?, ?, ?) ON CONFLICT(device, day) DO UPDATE SET stamp = excluded.stamp",
+                               arguments: [device, day, stamp])
+            } else {
+                try db.execute(sql: "DELETE FROM syncState WHERE device = ? AND day = ?", arguments: [device, day])
+            }
+        }
+    }
+
+    func syncStamps(device: String) throws -> [String: String] {
+        try db.read { db in
+            var stamps: [String: String] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT day, stamp FROM syncState WHERE device = ?", arguments: [device]) {
+                stamps[row["day"]] = row["stamp"]
+            }
+            return stamps
+        }
+    }
+
+    func saveDevice(_ device: SyncedDevice) throws {
+        try db.write { db in try device.save(db) }
+    }
+
+    /// Other Macs whose records are in this database.
+    public func devices() throws -> [SyncedDevice] {
+        try db.read { db in try SyncedDevice.order(Column("name")).fetchAll(db) }
+    }
+
+    /// Forgets everything that came from other Macs. Their files in the
+    /// sync folder are not touched.
+    public func removeRemoteData() throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM event WHERE device <> ''")
+            try db.execute(sql: "DELETE FROM syncState")
+            _ = try SyncedDevice.deleteAll(db)
+        }
+    }
+
+    public func taggingSnapshot() throws -> TaggingSnapshot? {
+        try db.read { db in
+            guard let raw = try Self.meta(db, "taggingUpdated"), let seconds = Double(raw) else { return nil }
+            let rules = Dictionary(grouping: try Rule.order(Column("id")).fetchAll(db), by: \.tagID)
+            let tags = try Tag.order(Column("sortOrder"), Column("id")).fetchAll(db).map { tag in
+                TaggingSnapshot.TagEntry(key: tag.key, name: tag.name, colorIndex: tag.colorIndex, enabled: tag.enabled,
+                                         sortOrder: tag.sortOrder,
+                                         rules: (rules[tag.id ?? 0] ?? []).map { .init(field: $0.field, op: $0.op, value: $0.value) })
+            }
+            return TaggingSnapshot(updated: Date(timeIntervalSince1970: seconds), tags: tags)
+        }
+    }
+
+    /// Makes tags and rules match `snapshot`. Existing tags are updated in
+    /// place (presets by key, custom tags by name) so that tags put on
+    /// single records by hand stay attached.
+    public func applyTagging(_ snapshot: TaggingSnapshot) throws {
+        try db.write { db in
+            var remaining = try Tag.fetchAll(db)
+            for entry in snapshot.tags {
+                let index = remaining.firstIndex { tag in
+                    entry.key != nil ? tag.key == entry.key : (tag.key == nil && tag.name == entry.name)
+                }
+                var tag = index.map { remaining.remove(at: $0) }
+                    ?? Tag(key: entry.key, name: entry.name, colorIndex: entry.colorIndex, sortOrder: entry.sortOrder)
+                tag.name = entry.name
+                tag.colorIndex = entry.colorIndex
+                tag.enabled = entry.enabled
+                tag.sortOrder = entry.sortOrder
+                try tag.save(db)
+                guard let tagID = tag.id else { continue }
+                try db.execute(sql: "DELETE FROM rule WHERE tagID = ?", arguments: [tagID])
+                for rule in entry.rules {
+                    var record = Rule(tagID: tagID, field: rule.field, op: rule.op, value: rule.value)
+                    try record.insert(db)
+                }
+            }
+            for tag in remaining { try tag.delete(db) }
+            try Self.setMeta(db, "taggingUpdated", String(snapshot.updated.timeIntervalSince1970))
+        }
     }
 
     private func seedPresetsIfNeeded() throws {

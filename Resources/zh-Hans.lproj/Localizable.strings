@@ -266,3 +266,26 @@
 "no keyboard or mouse input" = "无键鼠操作";
 ", " = "、";
 "1 record" = "1 条记录";
+
+/* 同步 */
+"Sync" = "同步";
+"All Macs" = "全部 Mac";
+"this Mac" = "本机";
+"Show records from" = "显示哪台 Mac 的记录";
+"Mac" = "设备";
+"Macs" = "设备";
+"Use this folder" = "使用这个文件夹";
+"Sync folder" = "同步文件夹";
+"Status" = "状态";
+"Syncing…" = "正在同步…";
+"Sync now" = "立即同步";
+"Not synced yet" = "尚未同步";
+"Last synced %@" = "上次同步 %@";
+"last synced %@" = "上次同步 %@";
+"Stop syncing" = "停止同步";
+"Removes the other Macs' records from this Mac. The files in the folder are kept." = "从本机移除其他 Mac 的记录，文件夹里的文件会保留。";
+"Keep several Macs in step, or keep a copy of your records, through a folder that is synced for you: iCloud Drive, Dropbox, a network drive. Each Mac writes its own records there and reads the others'. Tags and rules are shared." = "通过一个会自动同步的文件夹（iCloud 云盘、Dropbox、网络硬盘等），让多台 Mac 的记录保持一致，或者留一份备份。每台 Mac 只往里写自己的记录，并读取其他 Mac 的记录；标签和规则是共用的。";
+"Use iCloud Drive" = "使用 iCloud 云盘";
+"Choose folder…" = "选择文件夹…";
+"Sync is off by default. When it is on, your records are stored in that folder as readable files, so anyone who can open the folder can read them." = "同步默认关闭。开启后，记录会以可读文件的形式保存在这个文件夹里，能打开这个文件夹的人都能读到它们。";
+"Trace itself never connects to the network. Records are also written to your sync folder." = "Trace 本身不联网。记录同时会写入你的同步文件夹。";

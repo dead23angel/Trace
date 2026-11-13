@@ -52,6 +52,10 @@ Trace 驻留在菜单栏，自动记录你面前是哪个应用、哪个窗口�
 
 ![周报告：每日时长、热力图、常用网站和文件](docs/screenshots/zh/reports.png)
 
+### 多台 Mac，一份全景
+
+同步是可选功能，默认关闭。给 Trace 指定一个会自动同步的文件夹（iCloud 云盘、Dropbox、网络硬盘等），每台 Mac 就会把自己的记录写进去，并读取其他 Mac 的记录。标签和规则是共用的，可以合在一起看，也可以单独看某一台。文件是纯文本，所以这个文件夹同时也是一份备份。
+
 ### 原生的 Mac 体验
 
 使用 SwiftUI 编写，支持浅色、深色和跟随系统；界面有简体中文和英文，切换后立即生效，不需要重启；菜单栏面板可以随时查看今天的总时长；支持登录时自动启动。
@@ -62,7 +66,8 @@ Trace 驻留在菜单栏，自动记录你面前是哪个应用、哪个窗口�
 
 ## 隐私
 
-- **只存本机。** 所有数据保存在一个 SQLite 文件里：`~/Library/Application Support/Trace/trace.sqlite`。Trace 不联网，也没有账号。
+- **默认只存本机。** 所有数据保存在一个 SQLite 文件里：`~/Library/Application Support/Trace/trace.sqlite`。Trace 不联网，也没有账号。
+- **只有你开启才会同步。** 设置了同步文件夹后，记录会同时以可读文件的形式写进去，由同步这个文件夹的服务负责传输。能打开这个文件夹的人都能读到这些记录。关闭同步后，Trace 不再往里写。
 - **不记录按键，不截屏。** Trace 只读取前台应用的名称，并通过 macOS 的辅助功能接口读取当前窗口的标题、文档路径和页面地址，除此之外什么都不读。
 - **网址会去掉敏感部分。** 保存之前会去掉查询参数、锚点和账号密码。
 - **记录什么由你决定。** 窗口标题、文件路径、网址可以分别关闭，任何应用都可以完全排除。
@@ -107,6 +112,7 @@ open build/Trace.app
 | 采集 | `Sources/Trace/Capture` | 每两秒从 `NSWorkspace` 读取前台应用，通过辅助功能接口读取当前窗口，从 `CGEventSource` 读取空闲时间。 |
 | 存储 | `Sources/TraceCore/EventStore.swift` | 通过 [GRDB](https://github.com/groue/GRDB.swift) 使用 SQLite。连续相同的采样会延长同一条记录，所以每次停留只有一行。空闲时间不保存，表现为记录之间的空隙。 |
 | 标签 | `Sources/TraceCore/Tagging.swift` | 规则可以匹配应用、应用类别、文件路径、网址或窗口标题。对单条记录手动加减的标签优先于规则。 |
+| 同步 | `Sources/TraceCore/SyncEngine.swift` | 每台 Mac 在同步文件夹里自己的子目录下按天写文件，并读取其他 Mac 的文件，所以两台 Mac 不会修改同一个文件。标签和规则以最近一次修改为准。 |
 | 分析 | `Sources/TraceCore/Analyzer.swift` | 每日汇总、时段划分、层级汇总、报告和 CSV 导出。 |
 | 界面 | `Sources/Trace/Views` | SwiftUI。颜色和通用控件在 `Theme.swift` 里。 |
 
@@ -121,6 +127,8 @@ open build/Trace.app
 - 不碰键盘和鼠标看视频，超过空闲判定时长后会被记为离开。
 - 无法识别浏览器的无痕窗口，会和普通窗口一样记录。如果介意，可以排除该浏览器，或者关闭网址记录。
 - 能否读到页面地址，取决于浏览器向辅助功能接口暴露了什么。Safari 和基于 Chromium 的浏览器（Chrome、Edge、Arc、Brave）可以读到；其他浏览器可能只有窗口标题。
+
+- 开启同步后，不同 Mac 之间的时间不会去重：两台 Mac 同时在用，两边都会计入。手动给单条记录加的标签只保留在添加它的那台 Mac 上。
 
 ## 参与贡献
 
