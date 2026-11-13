@@ -5,16 +5,19 @@
 <h1 align="center">Trace</h1>
 
 <p align="center">
-  An open-source activity tracker for macOS that keeps everything on your Mac.<br>
-  开源的 macOS 活动记录工具，数据只保存在本机。
+  An open-source activity tracker for macOS that keeps everything on your Mac.
+</p>
+
+<p align="center">
+  <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/lxyeternal/Trace/releases/latest">Download</a> ·
   <a href="#features">Features</a> ·
   <a href="#privacy">Privacy</a> ·
-  <a href="#build-from-source">Build from source</a> ·
-  <a href="#中文说明">中文说明</a>
+  <a href="#install">Install</a> ·
+  <a href="#build-from-source">Build from source</a>
 </p>
 
 ![Overview of a day in Trace](docs/screenshots/overview.png)
@@ -53,9 +56,9 @@ A week, a month or a year at a glance: time per day stacked by tag, the hours yo
 
 Native SwiftUI, light and dark appearance, English and Simplified Chinese (switchable without restarting), a menu bar panel with today's total, and launch at login.
 
-| Dark | 简体中文 |
+| Dark appearance | Simplified Chinese |
 |---|---|
-| ![Overview in dark appearance](docs/screenshots/overview-dark.png) | ![Overview in Simplified Chinese](docs/screenshots/overview-zh.png) |
+| ![Overview in dark appearance](docs/screenshots/overview-dark.png) | ![Overview in Simplified Chinese](docs/screenshots/zh/overview.png) |
 
 ## Privacy
 
@@ -122,19 +125,6 @@ Copy `Resources/zh-Hans.lproj` to `Resources/<code>.lproj`, translate the right-
 ## Contributing
 
 Issues and pull requests are welcome. Please run `swift test` before opening a pull request, and keep new interface text in both `en` and `zh-Hans`.
-
-## 中文说明
-
-Trace 驻留在菜单栏，自动记录你正在使用的应用、窗口、文件和网页以及停留时长，不需要手动开始计时。
-
-- **详细的时间线**：按 标签 › 应用 › 文件或网站 › 页面 逐层展开；点选或拖选一天中的任意一段，只汇总这一段。
-- **逐条记录**：按时段分组查看每一次停留，可以查看文件路径、网址，并给单条记录加减标签。
-- **自动标签**：内置开发、办公、学习、沟通、娱乐、游戏、设计、浏览八个标签，装好即用；也可以自建标签和规则，修改规则后历史记录同步生效。
-- **报告**：按周、月、年查看每日时长、活跃时段、常用网站和文件，可导出 CSV。
-- **隐私**：数据只保存在本机的一个 SQLite 文件里；不联网、没有账号；不记录按键和屏幕内容；网址保存前会去掉查询参数。
-- **原生体验**：SwiftUI，支持浅色、深色和跟随系统，中英文可即时切换。
-
-安装：从 [Releases](https://github.com/lxyeternal/Trace/releases/latest) 下载 `.dmg` 文件，拖到“应用程序”，首次启动时在 系统设置 › 隐私与安全性 › 辅助功能 中允许 Trace。如果系统提示无法验证，请到 系统设置 › 隐私与安全性 里点击“仍要打开”。
 
 ## License
 
