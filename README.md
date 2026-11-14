@@ -20,7 +20,7 @@
   <a href="#build-from-source">Build from source</a>
 </p>
 
-![Overview of a day in Trace](docs/screenshots/overview.png)
+![A tour of Trace: overview, lanes, timeline, projects, records, focus and reports](docs/tour.gif)
 
 Trace sits in the menu bar and records which app, window, file and web page is in front of you, and for how long. There are no timers to start and nothing to fill in. At the end of the day it shows where the time went, down to the single file or page.
 
