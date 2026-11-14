@@ -9,6 +9,7 @@
 - **Sessions**: press Start and pick a tag; until you stop, everything counts as that tag. Open-ended or timed, from the new Focus page, the sidebar or the menu bar.
 - **Being away**: a call, or sound from the app in front, keeps you counted as present; background sound can be made to count too. Away rows say what was playing.
 - **Settings**: every installed app is listed with a switch to leave it out, most used first; the Sync pane shows clearly when the last sync finished and when the next is due.
+- **Window and Dock**: closing the window leaves Trace recording in the menu bar without showing as running in the Dock; clicking the Dock icon or opening the app again always brings the window back. It quits only from the menu bar panel or with Command-Q.
 - **Projects**: time per project, found from the folder each file is in.
 - **Review**: a few sentences on each week and month compared with the one before.
 - **Year calendar**: one square per day; click a day to open it.

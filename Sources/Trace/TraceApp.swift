@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct TraceApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
 
     var body: some Scene {
@@ -24,7 +25,7 @@ struct TraceApp: App {
                 .environmentObject(model.watcher)
                 .id(model.language)
         } label: {
-            Image(systemName: "waveform.path.ecg")
+            MenuBarLabel()
         }
         .menuBarExtraStyle(.window)
 
@@ -34,5 +35,21 @@ struct TraceApp: App {
                 .environmentObject(model.watcher)
                 .id(model.language)
         }
+    }
+}
+
+/// The menu bar icon. It is always there, so it is also where the app
+/// learns how to open its main window when the Dock icon is clicked.
+private struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: "waveform.path.ecg")
+            .onAppear { AppDelegate.shared?.openMain = { openWindow(id: "main") } }
+            .task {
+                // The delegate may finish launching after this view appears.
+                try? await Task.sleep(for: .seconds(0.5))
+                AppDelegate.shared?.openMain = { openWindow(id: "main") }
+            }
     }
 }

@@ -94,8 +94,8 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(FullWidth(kind: .bordered))
                 Button(L("Open Trace")) {
-                    openWindow(id: "main")
-                    NSApp.activate(ignoringOtherApps: true)
+                    AppDelegate.shared?.openMain = { openWindow(id: "main") }
+                    AppDelegate.shared?.showMain()
                 }
                 .buttonStyle(FullWidth(kind: .prominent))
             }
