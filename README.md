@@ -28,9 +28,9 @@ Trace sits in the menu bar and records which app, window, file and web page is i
 
 ### The day in lanes
 
-One lane per tag or app, with sound and calls underneath, so you can see what happened at the same time: coding with music on, or a meeting that ran in the background. Trace notes which apps are playing sound or using the microphone, never what is played or said. No keyboard or mouse does not mean you are away: while you are on a call, or the app in front is playing sound, the time still counts.
+One lane per tag or app, with sound and calls underneath, so you can see what happened at the same time: coding with music on, or a meeting that ran in the background. Below that, every app that was open gets a lane of its own, solid while its window was on screen and faint while it was open out of sight. Only the app in front counts towards tracked time. Trace notes which apps are playing sound or using the microphone, never what is played or said. No keyboard or mouse does not mean you are away: while you are on a call, or the app in front is playing sound, the time still counts.
 
-![The day as parallel lanes, with sound and calls below](docs/screenshots/lanes.png)
+![The day as parallel lanes, with sound, calls and every open app below](docs/screenshots/lanes.png)
 
 ### A detailed timeline
 
@@ -82,7 +82,11 @@ Sync is optional and off by default. Turn on **Sync with iCloud** in Settings an
 
 ### Made for the Mac
 
-Native SwiftUI, light and dark appearance, English and Simplified Chinese (switchable without restarting), a menu bar panel with today's total, and launch at login.
+Native SwiftUI, light and dark appearance, English and Simplified Chinese (switchable without restarting), and launch at login. The menu bar panel shows today's total, the app in front, and what else is going on: a call, sound, windows on screen and apps open out of sight. Closing the window leaves Trace recording in the menu bar.
+
+<p align="center">
+  <img src="docs/screenshots/menu.png" width="300" alt="The menu bar panel">
+</p>
 
 | Dark appearance | Simplified Chinese |
 |---|---|
@@ -94,7 +98,7 @@ Native SwiftUI, light and dark appearance, English and Simplified Chinese (switc
 - **Sync only if you turn it on.** With a sync folder set, your records are also written there as readable files, and whatever syncs that folder carries them. Anyone who can open the folder can read them. Turn sync off and Trace stops writing to it.
 - **No keystrokes, no screenshots.** Trace reads the name of the app in front and, through the macOS Accessibility API, the title, document path and page address of its focused window. Nothing else.
 - **URLs without the sensitive part.** Query strings, fragments and credentials are removed before a URL is stored.
-- **You choose what is recorded.** Window titles, file paths, web addresses, and sound and calls can each be turned off, and any app can be excluded completely.
+- **You choose what is recorded.** Window titles, file paths, web addresses, sound and calls, and the list of open apps can each be turned off, and any app can be excluded completely.
 - **Your data is yours.** Export it as CSV or erase it from Settings at any time.
 
 ## Install
@@ -133,7 +137,7 @@ Useful commands:
 
 | Part | Where | What it does |
 |---|---|---|
-| Capture | `Sources/Trace/Capture` | Reads the frontmost app from `NSWorkspace`, the focused window through the Accessibility API, idle time from `CGEventSource`, and which apps play sound or use the microphone from Core Audio, every two seconds. |
+| Capture | `Sources/Trace/Capture` | Reads the frontmost app from `NSWorkspace`, the focused window through the Accessibility API, idle time from `CGEventSource`, and which apps play sound or use the microphone from Core Audio, every two seconds. Every ten seconds it also notes which apps are open and whether a window of theirs is on screen, from the window list (owner and frame only, no titles or contents). |
 | Storage | `Sources/TraceCore/EventStore.swift` | SQLite via [GRDB](https://github.com/groue/GRDB.swift). Consecutive identical samples extend one event, so there is one row per stay. Idle time is not stored; it appears as gaps. |
 | Tagging | `Sources/TraceCore/Tagging.swift` | Rules match on app, app category, file path, URL or window title. Tags added or removed by hand on a single record override the rules. |
 | Sync | `Sources/TraceCore/SyncEngine.swift` | Each Mac writes one file per day into its own subfolder of the sync folder and reads the other Macs' files, so two Macs never edit the same file. For tags and rules the most recent edit wins. |

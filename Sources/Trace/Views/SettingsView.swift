@@ -116,8 +116,11 @@ struct SettingsView: View {
         row(L("Web addresses"), L("The page address in browsers, stored without the query string")) {
             Toggle(L("Web addresses"), isOn: $model.captureURLs).toggleStyle(.switch).labelsHidden()
         }
-        row(L("Sound and calls"), L("Which apps are playing sound or using the microphone, also in the background. Not what is played or said."), last: true) {
+        row(L("Sound and calls"), L("Which apps are playing sound or using the microphone, also in the background. Not what is played or said.")) {
             Toggle(L("Sound and calls"), isOn: $model.captureBackground).toggleStyle(.switch).labelsHidden()
+        }
+        row(L("All open apps"), L("Every app that is open while you are at the Mac, and whether its window is on screen. Shown beside the app in front; it does not add to tracked time."), last: true) {
+            Toggle(L("All open apps"), isOn: $model.captureOpenApps).toggleStyle(.switch).labelsHidden()
         }
         Text(L("The app in front and how long you stay are always recorded. Keystrokes and screen contents never are."))
             .font(.system(size: 12))

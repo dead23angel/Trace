@@ -65,6 +65,15 @@ public enum DemoData {
         (840, 900, "us.zoom.xos", "zoom.us", .audio),
         (1032, 1112, "com.apple.Music", "Music", .audio),
         (1150, 1185, "com.apple.Safari", "Safari", .audio),
+        (522, 1188, "com.apple.dt.Xcode", "Xcode", .visible),
+        (522, 760, "com.apple.Safari", "Safari", .visible),
+        (760, 1040, "com.apple.Safari", "Safari", .open),
+        (1040, 1188, "com.apple.Safari", "Safari", .visible),
+        (522, 640, "com.apple.mail", "Mail", .visible),
+        (640, 1188, "com.apple.mail", "Mail", .open),
+        (522, 1188, "com.apple.Music", "Music", .open),
+        (835, 905, "us.zoom.xos", "zoom.us", .visible),
+        (905, 1188, "us.zoom.xos", "zoom.us", .open),
     ]
 
     /// Background records to go with `events`, generated the same way.

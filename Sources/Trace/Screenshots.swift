@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import TraceCore
 
 /// Takes the screenshots used in the README. Started with
@@ -63,6 +64,7 @@ enum Screenshots {
             NSApp.activate(ignoringOtherApps: true)
             window.setContentSize(NSSize(width: 1320, height: 860))
             window.center()
+            let language = model.language
             for shot in shots {
                 shot.prepare(model)
                 try? await Task.sleep(for: .seconds(1.6))
@@ -70,8 +72,33 @@ enum Screenshots {
                     try? data.write(to: folder.appendingPathComponent("\(shot.name).png"))
                 }
             }
+            model.language = language
+            try? await Task.sleep(for: .seconds(0.5))
+            if let data = await menuPanel(model: model) {
+                try? data.write(to: folder.appendingPathComponent("menu.png"))
+            }
             NSApp.terminate(nil)
         }
+    }
+
+    /// The menu bar panel, shown in a window of its own on the menu material.
+    private static func menuPanel(model: AppModel) async -> Data? {
+        let host = NSHostingView(rootView: MenuBarView().environmentObject(model).environmentObject(model.watcher))
+        let size = host.fittingSize
+        let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
+        effect.material = .menu
+        effect.state = .active
+        host.frame = effect.bounds
+        effect.addSubview(host)
+        let panel = NSPanel(contentRect: effect.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        panel.contentView = effect
+        panel.center()
+        panel.orderFrontRegardless()
+        try? await Task.sleep(for: .seconds(1.2))
+        defer { panel.close() }
+        guard let rep = effect.bitmapImageRepForCachingDisplay(in: effect.bounds) else { return nil }
+        effect.cacheDisplay(in: effect.bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
     }
 
     /// The window as a PNG with rounded corners and a soft shadow around it.

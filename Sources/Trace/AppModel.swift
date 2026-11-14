@@ -105,6 +105,9 @@ final class AppModel: ObservableObject {
     @Published var captureBackground: Bool {
         didSet { UserDefaults.standard.set(captureBackground, forKey: "captureBackground"); watcher.captureBackground = captureBackground }
     }
+    @Published var captureOpenApps: Bool {
+        didSet { UserDefaults.standard.set(captureOpenApps, forKey: "captureOpenApps"); watcher.captureOpenApps = captureOpenApps }
+    }
     @Published var anySoundMeansPresent: Bool {
         didSet { UserDefaults.standard.set(anySoundMeansPresent, forKey: "anySoundMeansPresent"); watcher.anySoundMeansPresent = anySoundMeansPresent }
     }
@@ -147,7 +150,7 @@ final class AppModel: ObservableObject {
     init() {
         let defaults = UserDefaults.standard
         defaults.register(defaults: ["captureTitles": true, "captureFiles": true, "captureURLs": true,
-                                     "captureBackground": true])
+                                     "captureBackground": true, "captureOpenApps": true])
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         language = AppLanguage(rawValue: defaults.string(forKey: "language") ?? "") ?? .system
         let minutes = defaults.integer(forKey: "idleMinutes")
@@ -156,6 +159,7 @@ final class AppModel: ObservableObject {
         captureFiles = defaults.bool(forKey: "captureFiles")
         captureURLs = defaults.bool(forKey: "captureURLs")
         captureBackground = defaults.bool(forKey: "captureBackground")
+        captureOpenApps = defaults.bool(forKey: "captureOpenApps")
         anySoundMeansPresent = defaults.bool(forKey: "anySoundMeansPresent")
         excludedApps = defaults.stringArray(forKey: "excludedApps") ?? []
         if let id = defaults.string(forKey: "deviceID") {
@@ -206,6 +210,7 @@ final class AppModel: ObservableObject {
         watcher.captureFiles = captureFiles
         watcher.captureURLs = captureURLs
         watcher.captureBackground = captureBackground
+        watcher.captureOpenApps = captureOpenApps
         watcher.anySoundMeansPresent = anySoundMeansPresent
         watcher.excluded = Set(excludedApps)
 

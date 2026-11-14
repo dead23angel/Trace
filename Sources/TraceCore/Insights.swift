@@ -78,20 +78,23 @@ public struct GanttBar: Identifiable, Sendable {
     public let tag: Tag?
     /// What the bar stands for, usually an app name.
     public let label: String
+    /// Drawn lighter: the app was open but had no window showing.
+    public let faint: Bool
     public var id: Date { start }
 
-    public init(start: Date, end: Date, tag: Tag?, label: String) {
+    public init(start: Date, end: Date, tag: Tag?, label: String, faint: Bool = false) {
         self.start = start
         self.end = end
         self.tag = tag
         self.label = label
+        self.faint = faint
     }
 }
 
 /// One lane of the day: everything of one tag, one app, one background
 /// activity or one Mac.
 public struct GanttRow: Identifiable, Sendable {
-    public enum Kind: Sendable { case tag, app, audio, mic, device, session }
+    public enum Kind: Sendable { case tag, app, audio, mic, device, session, open }
     public let id: String
     public let kind: Kind
     public let label: String
@@ -118,6 +121,8 @@ public struct Gantt: Sendable {
     public var rows: [GanttRow] = []
     /// Sound and microphone lanes; empty when nothing was recorded.
     public var background: [GanttRow] = []
+    /// One lane per app that was open, in front or not, longest on screen first.
+    public var open: [GanttRow] = []
     /// One lane per Mac, when there is more than one.
     public var devices: [GanttRow] = []
 }
@@ -185,7 +190,7 @@ extension Analyzer {
     private static func merged(_ bars: [GanttBar], gap: TimeInterval) -> [GanttBar] {
         var result: [GanttBar] = []
         for bar in bars.sorted(by: { $0.start < $1.start }) {
-            if var last = result.last, last.tag?.id == bar.tag?.id, last.label == bar.label,
+            if var last = result.last, last.tag?.id == bar.tag?.id, last.label == bar.label, last.faint == bar.faint,
                bar.start.timeIntervalSince(last.end) <= gap {
                 last.end = max(last.end, bar.end)
                 result[result.count - 1] = last
@@ -197,7 +202,7 @@ extension Analyzer {
     }
 
     /// The day as parallel lanes. `events` is what was in front and
-    /// `background` what played sound or used the microphone.
+    /// `background` what played sound, used the microphone or was open.
     public static func gantt(_ events: [ActivityEvent], background: [ActivityEvent] = [], in day: DateInterval,
                              tagger: Tagger, grouping: GanttGrouping, maxRows: Int = 10,
                              deviceName: (String) -> String = { $0 }) -> Gantt {
@@ -235,6 +240,26 @@ extension Analyzer {
             row.seconds = union(row.bars.map { ($0.start, $0.end) })
             if !row.bars.isEmpty { gantt.background.append(row) }
         }
+
+        // Everything that was open, one lane per app.
+        var open: [String: (row: GanttRow, showing: TimeInterval)] = [:]
+        for e in background where e.layer == Layer.visible.rawValue || e.layer == Layer.open.rawValue {
+            guard let span = clip(e, to: day) else { continue }
+            let showing = e.layer == Layer.visible.rawValue
+            var item = open[e.bundleID] ?? (GanttRow(id: "open-\(e.bundleID)", kind: .open, label: e.appName,
+                                                     tag: tagger.primary(for: e), bundleID: e.bundleID, seconds: 0, bars: []), 0)
+            item.row.bars.append(GanttBar(start: span.start, end: span.end, tag: item.row.tag, label: "", faint: !showing))
+            if showing { item.showing += span.duration }
+            open[e.bundleID] = item
+        }
+        gantt.open = open.values.compactMap { item -> (row: GanttRow, showing: TimeInterval)? in
+            var row = item.row
+            row.bars = merged(row.bars, gap: 60)
+            row.seconds = union(row.bars.map { ($0.start, $0.end) })
+            return row.seconds >= 60 ? (row, item.showing) : nil
+        }
+        .sorted { ($0.showing, $0.row.seconds, $1.row.label) > ($1.showing, $1.row.seconds, $0.row.label) }
+        .map(\.row)
 
         // One lane per Mac.
         let byDevice = Dictionary(grouping: events, by: \.device)

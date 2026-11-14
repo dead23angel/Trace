@@ -524,6 +524,33 @@ final class TraceCoreTests: XCTestCase {
         XCTAssertEqual(try other.background(from: t0 - 1, to: t0 + 1000).map(\.layer), [1, 2, 1])
     }
 
+    func testOpenAppsAreRecordedBesideTheFrontAppAndGetTheirOwnLanes() throws {
+        let store = try EventStore()
+        let zoom = (bundleID: "us.zoom.xos", appName: "zoom.us", layer: Layer.visible)
+        let edge = (bundleID: "com.microsoft.edgemac", appName: "Microsoft Edge", layer: Layer.open)
+        let edgeShown = (bundleID: "com.microsoft.edgemac", appName: "Microsoft Edge", layer: Layer.visible)
+        for step in 0...30 { try store.backgroundHeartbeat([zoom, edge], at: t0 + Double(step) * 10, pulse: 30) }
+        // Edge comes on screen: its hidden record stops and a showing one starts.
+        for step in 31...60 { try store.backgroundHeartbeat([zoom, edgeShown], at: t0 + Double(step) * 10, pulse: 30) }
+        _ = try store.heartbeat(xcode("A.swift"), at: t0)
+        _ = try store.heartbeat(xcode("A.swift"), at: t0 + 10)
+
+        // Tracked time is still only what was in front.
+        XCTAssertEqual(try store.events(from: t0 - 1, to: t0 + 1000).count, 1)
+        let background = try store.background(from: t0 - 1, to: t0 + 1000)
+        XCTAssertEqual(background.map(\.layer).sorted(), [3, 3, 4])
+
+        let day = DateInterval(start: t0 - 10, duration: 86_400)
+        let gantt = Analyzer.gantt(try store.events(from: day.start, to: day.end), background: background, in: day,
+                                   tagger: try store.tagger(), grouping: .app)
+        XCTAssertTrue(gantt.background.isEmpty)                    // no sound, no call
+        XCTAssertEqual(gantt.open.map(\.label), ["zoom.us", "Microsoft Edge"])   // longest on screen first
+        XCTAssertEqual(gantt.open[0].seconds, 600, accuracy: 0.001)
+        XCTAssertEqual(gantt.open[0].bars.map(\.faint), [false])
+        XCTAssertEqual(gantt.open[1].bars.map(\.faint), [true, false])
+        XCTAssertEqual(gantt.open[1].seconds, 590, accuracy: 0.001)
+    }
+
     func testGanttBuildsLanesForTagsAppsSoundAndMacs() throws {
         let store = try EventStore()
         let tagger = try store.tagger()

@@ -13,125 +13,213 @@ struct MenuBarView: View {
         return (L("Recording"), Theme.accent)
     }
 
+    /// What else is going on besides the app in front: calls, sound, windows
+    /// on screen and apps open out of sight.
+    private var alongside: [(symbol: String, color: Color, title: String, apps: String)] {
+        func names(_ list: [String], limit: Int = 6) -> String {
+            let sorted = Array(Set(list)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            let shown = sorted.prefix(limit).joined(separator: L(", "))
+            return sorted.count > limit ? String(format: L("%@ and %d more"), shown, sorted.count - limit) : shown
+        }
+        let front = watcher.current?.bundleID
+        var lines: [(symbol: String, color: Color, title: String, apps: String)] = []
+        let calls = watcher.background.filter { $0.layer == .mic }.map(\.appName)
+        let sound = watcher.background.filter { $0.layer == .audio }.map(\.appName)
+        let showing = watcher.open.filter { $0.isShowing && $0.bundleID != front }.map(\.appName)
+        let hidden = watcher.open.filter { !$0.isShowing && $0.bundleID != front }.map(\.appName)
+        if !calls.isEmpty { lines.append(("phone.fill", Theme.accent, L("On a call"), names(calls))) }
+        if !sound.isEmpty { lines.append(("speaker.wave.2.fill", Theme.accent, L("Playing sound"), names(sound))) }
+        if !showing.isEmpty { lines.append(("macwindow", Theme.muted, L("On screen"), names(showing))) }
+        if !hidden.isEmpty { lines.append(("square.stack.3d.down.right", Theme.muted, L("Out of sight"), names(hidden))) }
+        return lines
+    }
+
     var body: some View {
         let summary = model.summary
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: "waveform.path.ecg").font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.accent)
-                Text("Trace").fontWeight(.bold)
-                Spacer()
-                Circle().fill(state.color).frame(width: 7, height: 7)
-                Text(state.title).font(.system(size: 12)).foregroundStyle(Theme.muted)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("Tracked today")).font(.system(size: 12)).foregroundStyle(Theme.muted)
-                Text(Fmt.duration(summary.total)).font(.system(size: 30, weight: .bold)).tracking(-0.6)
-            }
-            if summary.total > 0 {
-                GeometryReader { geo in
-                    let usable = geo.size.width - CGFloat(max(summary.byTag.count - 1, 0)) * 2
-                    HStack(spacing: 2) {
-                        ForEach(summary.byTag) { total in
-                            Rectangle().fill(Palette.color(total.tag))
-                                .frame(width: max(2, usable * total.seconds / summary.total))
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Text("Trace").font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Circle().fill(state.color).frame(width: 6, height: 6)
+                    Text(state.title).font(.system(size: 12)).foregroundStyle(.secondary)
                 }
-                .frame(height: 10)
-                .clipShape(Capsule())
-                .accessibilityHidden(true)
-                VStack(spacing: 6) {
-                    ForEach(summary.byTag.prefix(3)) { total in
-                        HStack(spacing: 8) {
-                            Swatch(total.tag, size: 9)
-                            Text(tagName(total.tag))
-                            Spacer()
-                            Text(Fmt.duration(total.seconds)).foregroundStyle(Theme.muted)
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(L("Tracked today")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(Fmt.duration(summary.total)).font(.system(size: 28, weight: .bold)).tracking(-0.5)
                 }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("Current activity")).font(.system(size: 11)).foregroundStyle(Theme.muted)
-                if let current = watcher.current {
-                    Text(current.headline).fontWeight(.semibold).lineLimit(1).truncationMode(.middle)
-                    if let since = watcher.currentSince {
-                        Text(String(format: L("For %@"), Fmt.duration(max(0, Date().timeIntervalSince(since)))))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.muted)
-                    }
-                } else {
-                    Text(watcher.isPaused ? L("Recording is paused") : L("Nothing in front right now"))
-                        .fontWeight(.semibold)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            if model.running != nil {
-                RunningSessionPill()
-            } else {
-                Menu {
-                    ForEach(model.tags.filter(\.enabled)) { tag in
-                        Menu(tag.displayName) {
-                            Button(L("Until I stop it")) { model.startSession(tag, minutes: nil) }
-                            ForEach([25, 50, 60, 120], id: \.self) { minutes in
-                                Button(Fmt.duration(TimeInterval(minutes * 60))) { model.startSession(tag, minutes: minutes) }
+                if summary.total > 0 {
+                    GeometryReader { geo in
+                        let usable = geo.size.width - CGFloat(max(summary.byTag.count - 1, 0)) * 2
+                        HStack(spacing: 2) {
+                            ForEach(summary.byTag) { total in
+                                Rectangle().fill(Palette.color(total.tag))
+                                    .frame(width: max(2, usable * total.seconds / summary.total))
                             }
                         }
                     }
-                } label: {
-                    Label(L("Start a session…"), systemImage: "timer")
+                    .frame(height: 6)
+                    .clipShape(Capsule())
+                    .accessibilityHidden(true)
+                    VStack(spacing: 5) {
+                        ForEach(summary.byTag.prefix(3)) { total in
+                            HStack(spacing: 8) {
+                                Swatch(total.tag, size: 8)
+                                Text(tagName(total.tag))
+                                Spacer()
+                                Text(Fmt.duration(total.seconds)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
             }
-            HStack(spacing: 8) {
-                Button(watcher.isPaused ? L("Resume") : L("Pause 15 minutes")) {
-                    if watcher.isPaused { watcher.isPaused = false } else { watcher.pause(for: 15 * 60) }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            separator
+            sectionTitle(L("Current activity"))
+            VStack(alignment: .leading, spacing: 1) {
+                if let current = watcher.current {
+                    HStack(spacing: 8) {
+                        AppIcon(bundleID: current.bundleID, size: 18)
+                        Text(current.headline).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        if let since = watcher.currentSince {
+                            Text(Fmt.duration(max(0, Date().timeIntervalSince(since)))).foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Text(watcher.isPaused ? L("Recording is paused")
+                         : watcher.isIdle ? L("Away from the keyboard and mouse")
+                         : watcher.isSelfInFront ? L("Trace itself is in front") : L("Nothing in front right now"))
+                        .fontWeight(.medium)
+                    if !watcher.isPaused, !watcher.isIdle, watcher.isSelfInFront {
+                        Text(L("Trace does not record its own window")).font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
                 }
-                .buttonStyle(FullWidth(kind: .bordered))
-                Button(L("Open Trace")) {
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
+
+            if !watcher.isPaused, !alongside.isEmpty {
+                separator
+                sectionTitle(L("Also open now"))
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(alongside, id: \.title) { line in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: line.symbol).font(.system(size: 10)).foregroundStyle(line.color).frame(width: 18)
+                            Text(line.title).foregroundStyle(.secondary).fixedSize()
+                            Text(line.apps).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(.system(size: 12))
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+            }
+
+            separator
+            VStack(spacing: 0) {
+                if model.running != nil {
+                    RunningSessionPill().padding(.horizontal, 8).padding(.vertical, 4)
+                } else {
+                    Menu {
+                        ForEach(model.tags.filter(\.enabled)) { tag in
+                            Menu(tag.displayName) {
+                                Button(L("Until I stop it")) { model.startSession(tag, minutes: nil) }
+                                ForEach([25, 50, 60, 120], id: \.self) { minutes in
+                                    Button(Fmt.duration(TimeInterval(minutes * 60))) { model.startSession(tag, minutes: minutes) }
+                                }
+                            }
+                        }
+                    } label: {
+                        MenuRowLabel(title: L("Start a session…"), showsChevron: true)
+                    }
+                    .menuIndicator(.hidden)
+                    .buttonStyle(MenuRowStyle())
+                }
+                Button {
+                    if watcher.isPaused { watcher.isPaused = false } else { watcher.pause(for: 15 * 60) }
+                } label: {
+                    MenuRowLabel(title: watcher.isPaused ? L("Resume") : L("Pause 15 minutes"))
+                }
+                .buttonStyle(MenuRowStyle())
+                Button {
                     AppDelegate.shared?.openMain = { openWindow(id: "main") }
                     AppDelegate.shared?.showMain()
+                } label: {
+                    MenuRowLabel(title: L("Open Trace"))
                 }
-                .buttonStyle(FullWidth(kind: .prominent))
+                .buttonStyle(MenuRowStyle())
             }
-            Hairline()
-            HStack {
-                SettingsLink { Text(L("Settings…")) }
-                Spacer()
-                Button(L("Quit Trace")) { NSApp.terminate(nil) }
+            .padding(.vertical, 4)
+
+            separator
+            VStack(spacing: 0) {
+                SettingsLink { MenuRowLabel(title: L("Settings…")) }
+                    .buttonStyle(MenuRowStyle())
+                Button { NSApp.terminate(nil) } label: { MenuRowLabel(title: L("Quit Trace")) }
+                    .buttonStyle(MenuRowStyle())
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
-            .foregroundStyle(Theme.muted)
+            .padding(.top, 4)
+            .padding(.bottom, 5)
         }
-        .padding(16)
-        .frame(width: 320)
-        .background(Theme.panel)
+        .frame(width: 300)
         .font(.system(size: 13))
-        .foregroundStyle(Theme.ink)
         .monospacedDigit()
         .onAppear { model.goToToday(); model.reload() }
     }
+
+    private var separator: some View {
+        Rectangle().fill(.primary.opacity(0.1)).frame(height: 1).padding(.horizontal, 14)
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 5)
+    }
 }
 
-/// A design button that stretches to fill its share of a row.
-private struct FullWidth: ButtonStyle {
-    let kind: TRButtonStyle.Kind
+/// The contents of a row that looks and behaves like a menu item.
+private struct MenuRowLabel: View {
+    let title: String
+    var showsChevron = false
 
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 12)
+            if showsChevron {
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// A full-width row that lights up under the pointer, like a menu item.
+private struct MenuRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        configuration.label
-            .fontWeight(kind == .prominent ? .semibold : .medium)
-            .frame(maxWidth: .infinity, minHeight: 32)
-            .foregroundStyle(kind == .prominent ? Theme.onAccent : Theme.ink)
-            .background(kind == .prominent ? Theme.accent : .clear, in: shape)
-            .overlay(shape.strokeBorder(kind == .prominent ? .clear : Theme.line))
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .contentShape(shape)
+        Row(configuration: configuration)
+    }
+
+    private struct Row: View {
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                .background(.primary.opacity(configuration.isPressed ? 0.16 : (hovering ? 0.09 : 0)),
+                            in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .contentShape(Rectangle())
+                .padding(.horizontal, 6)
+                .onHover { hovering = $0 }
+        }
     }
 }

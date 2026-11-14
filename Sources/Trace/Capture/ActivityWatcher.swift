@@ -9,6 +9,8 @@ final class ActivityWatcher: ObservableObject {
     @Published private(set) var current: Sample?
     @Published private(set) var isTrusted = AXReader.isTrusted
     @Published private(set) var isIdle = false
+    /// Trace's own window is in front. It does not record itself.
+    @Published private(set) var isSelfInFront = false
     @Published var isPaused = false {
         didSet {
             if isPaused { current = nil } else { resume?.invalidate() }
@@ -27,6 +29,13 @@ final class ActivityWatcher: ObservableObject {
     var captureURLs = true
     /// Whether to record which apps play sound or use the microphone.
     var captureBackground = true
+    /// Whether to record every app that is open, not only the one in front.
+    var captureOpenApps = true {
+        didSet { if !captureOpenApps, !open.isEmpty { open = [] } }
+    }
+    /// Every app that was open at the last look.
+    @Published private(set) var open: Set<OpenApps.App> = []
+    private var lastOpenSample = Date.distantPast
     /// Apps heard or on a call at the last sample.
     @Published private(set) var background: Set<AudioMonitor.Activity> = []
     private var audible: Set<String> = []
@@ -46,6 +55,7 @@ final class ActivityWatcher: ObservableObject {
     private var lastWindow: (pid: pid_t, info: AXReader.WindowInfo)?
 
     private static let interval: TimeInterval = 2
+    private static let openInterval: TimeInterval = 10
     private static let ignored: Set<String> = ["com.apple.loginwindow", "com.apple.ScreenSaver.Engine"]
     private static let browsers: Set<String> = [
         "com.apple.Safari", "com.google.Chrome", "company.thebrowser.Browser", "org.mozilla.firefox",
@@ -124,11 +134,17 @@ final class ActivityWatcher: ObservableObject {
             return
         }
         if isIdle { isIdle = false }
+        sampleOpen(at: now)
 
+        let selfInFront = front?.bundleIdentifier == Bundle.main.bundleIdentifier
+        if selfInFront != isSelfInFront { isSelfInFront = selfInFront }
         guard let app = front,
               let bundleID = app.bundleIdentifier,
               !Self.ignored.contains(bundleID),
-              bundleID != Bundle.main.bundleIdentifier else { return }
+              !selfInFront else {
+            if current != nil { current = nil }
+            return
+        }
         if excluded.contains(bundleID) {
             if current != nil { current = nil }
             return
@@ -173,12 +189,25 @@ final class ActivityWatcher: ObservableObject {
         let (excluded, pulse) = (excluded, Self.interval * 5)
         queue.async { [store] in
             let active = AudioMonitor.current().filter { !excluded.contains($0.bundleID) }
-            try? store.backgroundHeartbeat(active.map { ($0.bundleID, $0.appName, $0.layer) }, at: now, pulse: pulse)
+            try? store.backgroundHeartbeat(active.map { (bundleID: $0.bundleID, appName: $0.appName, layer: $0.layer) }, at: now, pulse: pulse)
             DispatchQueue.main.async {
                 if self.background != active { self.background = active }
                 self.audible = Set(active.filter { $0.layer == .audio }.map(\.bundleID))
                 self.onCall = active.contains { $0.layer == .mic }
             }
+        }
+    }
+
+    /// Notes every app that is open, and whether a window of it shows. Only
+    /// while the user is there: apps left open overnight say nothing.
+    private func sampleOpen(at now: Date) {
+        guard captureOpenApps, now.timeIntervalSince(lastOpenSample) >= Self.openInterval else { return }
+        lastOpenSample = now
+        let apps = OpenApps.current(excluding: excluded.union(Self.ignored))
+        if apps != open { open = apps }
+        let items = apps.map { (bundleID: $0.bundleID, appName: $0.appName, layer: $0.isShowing ? Layer.visible : .open) }
+        queue.async { [store] in
+            try? store.backgroundHeartbeat(items, at: now, pulse: Self.openInterval * 3)
         }
     }
 

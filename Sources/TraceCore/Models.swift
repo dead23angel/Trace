@@ -80,6 +80,11 @@ public enum Layer: Int, Sendable, CaseIterable {
     case audio = 1
     /// An app using the microphone: a call or a meeting.
     case mic = 2
+    /// An app with a window showing on screen, in front or beside it.
+    case visible = 3
+    /// An app that is open with no window showing: hidden, minimized, on
+    /// another desktop or fully covered.
+    case open = 4
 }
 
 /// How a tag counts when judging focus.

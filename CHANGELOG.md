@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- **All open apps**: besides the app in front, Trace now notes every app that is open while you are at the Mac and whether its window is on screen. The lanes view gets one lane per open app, solid while a window was on screen and faint while it was out of sight. It does not add to tracked time and can be switched off under Settings › What is recorded.
+- **Menu bar panel**: redrawn to look like a system menu, on the translucent menu background with no frame around it. It now also lists what is on a call, playing sound, on screen and open out of sight, and says why when there is no current activity (Trace itself is in front, or no keyboard or mouse input).
+- **Fixed**: clicking a button at the top of a page could nudge the window, because the buttons reached into the strip that drags the window. Pages now start below it.
+- **Fixed**: with Trace's own window in front, the panel kept showing the previous app with a running clock although nothing was being recorded.
+
 ## 0.2.0
 
 - **Lanes**: the day as a Gantt-style chart, one lane per tag or app, with sound, calls and each Mac underneath.

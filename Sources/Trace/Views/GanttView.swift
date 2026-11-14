@@ -6,6 +6,8 @@ import TraceCore
 struct GanttCard: View {
     @EnvironmentObject private var model: AppModel
     @State private var grouping: GanttGrouping = .tag
+    @State private var showsAllOpen = false
+    private let openLimit = 6
 
     private let labelWidth: CGFloat = 210
     private let rowHeight: CGFloat = 30
@@ -41,6 +43,22 @@ struct GanttCard: View {
                 if !gantt.background.isEmpty {
                     section(L("IN THE BACKGROUND"), rows: gantt.background, scale: scale)
                 }
+                if !gantt.open.isEmpty {
+                    section(L("OPEN ALONGSIDE"), rows: showsAllOpen ? gantt.open : Array(gantt.open.prefix(openLimit)), scale: scale)
+                    HStack(spacing: 12) {
+                        Text(L("Solid: a window was on screen. Faint: open but out of sight. Not added to tracked time."))
+                            .foregroundStyle(Theme.muted)
+                        Spacer()
+                        if gantt.open.count > openLimit {
+                            Button(showsAllOpen ? L("Show fewer") : String(format: L("Show all %d apps"), gantt.open.count)) {
+                                showsAllOpen.toggle()
+                            }
+                            .buttonStyle(.trLink)
+                        }
+                    }
+                    .font(.system(size: 12))
+                    .padding(.top, 2)
+                }
                 if !gantt.devices.isEmpty {
                     section(L("MACS"), rows: gantt.devices, scale: scale)
                 }
@@ -66,11 +84,11 @@ struct GanttCard: View {
     }
 
     private func firstMoment(_ gantt: Gantt) -> Date? {
-        ([model.summary.first] + gantt.background.flatMap(\.bars).map { Optional($0.start) }).compactMap { $0 }.min()
+        ([model.summary.first] + (gantt.background + gantt.open).flatMap(\.bars).map { Optional($0.start) }).compactMap { $0 }.min()
     }
 
     private func lastMoment(_ gantt: Gantt) -> Date? {
-        ([model.summary.last] + gantt.background.flatMap(\.bars).map { Optional($0.end) }).compactMap { $0 }.max()
+        ([model.summary.last] + (gantt.background + gantt.open).flatMap(\.bars).map { Optional($0.end) }).compactMap { $0 }.max()
     }
 
     private func axis(_ scale: DayScale) -> some View {
@@ -118,7 +136,7 @@ struct GanttCard: View {
         HStack(spacing: 8) {
             switch row.kind {
             case .tag: Swatch(row.tag, size: 10).frame(width: 18)
-            case .app: AppIcon(bundleID: row.bundleID ?? "", size: 18)
+            case .app, .open: AppIcon(bundleID: row.bundleID ?? "", size: 18)
             case .audio: symbol("speaker.wave.2.fill")
             case .mic: symbol("phone.fill")
             case .device: symbol("laptopcomputer")
@@ -152,7 +170,7 @@ private struct GanttLane: View {
     let showsNow: Bool
     let select: (GanttBar) -> Void
 
-    private var barHeight: CGFloat { row.kind == .tag || row.kind == .app ? 18 : 14 }
+    private var barHeight: CGFloat { row.kind == .tag || row.kind == .app ? 18 : (row.kind == .open ? 12 : 14) }
 
     var body: some View {
         GeometryReader { geo in
@@ -207,13 +225,15 @@ private struct GanttLane: View {
         switch row.kind {
         case .device: return Theme.accent.opacity(0.55)
         case .audio, .mic: return Palette.color(bar.tag).opacity(0.38)
+        case .open: return Palette.color(bar.tag).opacity(bar.faint ? 0.2 : 0.6)
         default: return Palette.color(bar.tag)
         }
     }
 
     private func tip(_ bar: GanttBar) -> String {
         let time = "\(Fmt.time(bar.start)) – \(Fmt.time(bar.end)) · \(Fmt.duration(bar.end.timeIntervalSince(bar.start)))"
-        let what = bar.label.isEmpty ? (row.kind == .tag ? tagName(row.tag) : row.label) : bar.label
+        var what = bar.label.isEmpty ? (row.kind == .tag ? tagName(row.tag) : row.label) : bar.label
+        if row.kind == .open { what += " · " + (bar.faint ? L("open, out of sight") : L("window on screen")) }
         return what.isEmpty ? time : "\(what) · \(time)"
     }
 }

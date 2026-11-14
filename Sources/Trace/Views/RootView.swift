@@ -30,6 +30,17 @@ struct RootView: View {
     @EnvironmentObject private var watcher: ActivityWatcher
 
     var body: some View {
+        content
+        .ignoresSafeArea()
+        .sheet(isPresented: $model.showsOnboarding) {
+            OnboardingView()
+                .environmentObject(model)
+                .environmentObject(watcher)
+                .interactiveDismissDisabled()
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: 0) {
             Sidebar()
                 .frame(width: 220)
@@ -54,24 +65,25 @@ struct RootView: View {
         .font(.system(size: 13))
         .foregroundStyle(Theme.ink)
         .monospacedDigit()
-        .ignoresSafeArea()
-        .sheet(isPresented: $model.showsOnboarding) {
-            OnboardingView()
-                .environmentObject(model)
-                .environmentObject(watcher)
-                .interactiveDismissDisabled()
-        }
     }
+}
+
+enum WindowMetrics {
+    /// The window has no visible title bar, but its top strip (28 points)
+    /// still moves the window when dragged. Pages keep their buttons below
+    /// it: a click with the slightest movement would otherwise nudge the window.
+    static let pageTopInset: CGFloat = 34
 }
 
 /// Standard padding and scrolling for a page.
 struct Page<Content: View>: View {
     @ViewBuilder var content: Content
+    private let topInset = WindowMetrics.pageTopInset
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) { content }
-                .padding(EdgeInsets(top: 20, leading: 28, bottom: 28, trailing: 28))
+                .padding(EdgeInsets(top: topInset, leading: 28, bottom: 28, trailing: 28))
         }
     }
 }
@@ -263,7 +275,7 @@ struct PermissionBanner: View {
         }
         .padding(14)
         .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(EdgeInsets(top: 20, leading: 28, bottom: 0, trailing: 28))
+        .padding(EdgeInsets(top: WindowMetrics.pageTopInset, leading: 28, bottom: 0, trailing: 28))
     }
 }
 
