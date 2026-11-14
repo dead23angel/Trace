@@ -172,14 +172,7 @@ private struct Sidebar: View {
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 8)
                     ForEach(model.summary.byTag.prefix(8)) { total in
-                        HStack(spacing: 10) {
-                            Swatch(total.tag)
-                            Text(tagName(total.tag)).lineLimit(1)
-                            Spacer(minLength: 4)
-                            Text(Fmt.duration(total.seconds)).foregroundStyle(Theme.muted)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        SidebarTagRow(total: total)
                     }
                 }
             }
@@ -204,6 +197,33 @@ private struct Sidebar: View {
             }
         }
         .padding(EdgeInsets(top: 46, leading: 12, bottom: 16, trailing: 12))
+    }
+}
+
+/// A tag and its time for the day; a click opens the timeline for that tag.
+private struct SidebarTagRow: View {
+    @EnvironmentObject private var model: AppModel
+    let total: TagTotal
+    @State private var hovering = false
+
+    var body: some View {
+        let isOn = model.pane == .timeline && model.tagFilter == total.id
+        Button { model.showTag(total.id) } label: {
+            HStack(spacing: 10) {
+                Swatch(total.tag)
+                Text(tagName(total.tag)).lineLimit(1).fontWeight(isOn ? .semibold : .regular)
+                Spacer(minLength: 4)
+                Text(Fmt.duration(total.seconds)).foregroundStyle(Theme.muted)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isOn || hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(L("Show this tag in the timeline"))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 

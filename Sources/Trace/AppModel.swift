@@ -452,7 +452,9 @@ final class AppModel: ObservableObject {
 
     /// Whether `event` matches the search text and tag filter.
     func passesFilter(_ event: ActivityEvent) -> Bool {
-        if let tagFilter, !tagger.tags(for: event).contains(where: { $0.id == tagFilter }) { return false }
+        // The main tag, so the result adds up to the tag's total; 0 stands
+        // for untagged, as in `TagTotal.id`.
+        if let tagFilter, (tagger.primary(for: event)?.id ?? 0) != tagFilter { return false }
         let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !needle.isEmpty else { return true }
         return [event.appName, event.title, event.path ?? "", event.url ?? ""]
@@ -465,6 +467,18 @@ final class AppModel: ObservableObject {
         timelineMode = .records
         if let block { selectedBlock = block }
         selectedEventID = event
+        pane = .timeline
+    }
+
+    /// Opens the timeline narrowed to one tag (0 for untagged); asking for
+    /// the tag that is already showing clears the filter.
+    func showTag(_ id: Int64) {
+        if pane == .timeline, tagFilter == id {
+            tagFilter = nil
+            return
+        }
+        tagFilter = id
+        if timelineMode == .gantt { timelineMode = .byTag }
         pane = .timeline
     }
 

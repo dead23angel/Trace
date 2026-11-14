@@ -37,14 +37,17 @@ struct TimelineView: View {
                                   note: L("Trace records the app, window, file and page you are using. Keep it running and check back in a few minutes."))
                     .frame(minHeight: 420)
                 }
-            } else if model.timelineMode == .records {
-                RecordsView(events: events)
-            } else if model.timelineMode == .gantt {
-                GanttCard()
             } else {
-                HStack(alignment: .top, spacing: 12) {
-                    OutlineCard(events: events, mode: treeMode)
-                    DayColumnCard().frame(width: 360)
+                TagFilterBar()
+                if model.timelineMode == .records {
+                    RecordsView(events: events)
+                } else if model.timelineMode == .gantt {
+                    GanttCard()
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        OutlineCard(events: events, mode: treeMode)
+                        DayColumnCard().frame(width: 360)
+                    }
                 }
             }
         }

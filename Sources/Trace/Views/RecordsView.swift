@@ -1,6 +1,44 @@
 import SwiftUI
 import TraceCore
 
+/// One chip per tag used that day; the chosen one narrows every timeline
+/// view to that tag.
+struct TagFilterBar: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                chip(label: L("All"), color: Theme.ink, isOn: model.tagFilter == nil) { model.tagFilter = nil }
+                ForEach(model.summary.byTag) { total in
+                    chip(label: tagName(total.tag), color: Palette.color(total.tag), isOn: model.tagFilter == total.id) {
+                        model.tagFilter = model.tagFilter == total.id ? nil : total.id
+                    }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L("Filter by tag"))
+    }
+
+    private func chip(label: String, color: Color, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(label).fontWeight(isOn ? .semibold : .medium)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(isOn ? Theme.panel : .clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(isOn ? Theme.ink : Theme.line))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
 /// Every record of the day, grouped into sessions, with an inspector for
 /// the selected one.
 struct RecordsView: View {
@@ -22,7 +60,6 @@ struct RecordsView: View {
             ?? blocks.last
 
         VStack(alignment: .leading, spacing: 14) {
-            filters
             HStack(alignment: .top, spacing: 12) {
                 VStack(spacing: 12) {
                     if let current {
@@ -47,35 +84,6 @@ struct RecordsView: View {
                 Inspector(event: selected, blocks: blocks).frame(width: 320)
             }
         }
-    }
-
-    private var filters: some View {
-        HStack(spacing: 6) {
-            chip(label: L("All"), color: Theme.ink, isOn: model.tagFilter == nil) { model.tagFilter = nil }
-            ForEach(model.summary.byTag.compactMap(\.tag)) { tag in
-                chip(label: tag.displayName, color: Palette.color(tag), isOn: model.tagFilter == tag.id) {
-                    model.tagFilter = model.tagFilter == tag.id ? nil : tag.id
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L("Filter by tag"))
-    }
-
-    private func chip(label: String, color: Color, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Circle().fill(color).frame(width: 8, height: 8)
-                Text(label).fontWeight(isOn ? .semibold : .medium)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 28)
-            .background(isOn ? Theme.panel : .clear, in: Capsule())
-            .overlay(Capsule().strokeBorder(isOn ? Theme.ink : Theme.line))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private func isOpen(_ block: Block, current: Block?) -> Bool {
