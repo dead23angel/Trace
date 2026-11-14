@@ -79,12 +79,19 @@ public struct GanttBar: Identifiable, Sendable {
     /// What the bar stands for, usually an app name.
     public let label: String
     public var id: Date { start }
+
+    public init(start: Date, end: Date, tag: Tag?, label: String) {
+        self.start = start
+        self.end = end
+        self.tag = tag
+        self.label = label
+    }
 }
 
 /// One lane of the day: everything of one tag, one app, one background
 /// activity or one Mac.
 public struct GanttRow: Identifiable, Sendable {
-    public enum Kind: Sendable { case tag, app, audio, mic, device }
+    public enum Kind: Sendable { case tag, app, audio, mic, device, session }
     public let id: String
     public let kind: Kind
     public let label: String
@@ -92,6 +99,16 @@ public struct GanttRow: Identifiable, Sendable {
     public let bundleID: String?
     public var seconds: TimeInterval
     public var bars: [GanttBar]
+
+    public init(id: String, kind: Kind, label: String, tag: Tag?, bundleID: String?, seconds: TimeInterval, bars: [GanttBar]) {
+        self.id = id
+        self.kind = kind
+        self.label = label
+        self.tag = tag
+        self.bundleID = bundleID
+        self.seconds = seconds
+        self.bars = bars
+    }
 }
 
 public enum GanttGrouping: Sendable { case tag, app }

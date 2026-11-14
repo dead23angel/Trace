@@ -21,7 +21,7 @@ struct OverviewView: View {
                     HourlyCard()
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                GoalsCard()
+                GoalsCard(showsFocusLink: true)
                 DayLanesCard()
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 12) {

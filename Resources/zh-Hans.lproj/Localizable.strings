@@ -26,7 +26,6 @@
 "Tracked" = "已记录";
 "Longest focus" = "最长专注";
 "Most used app" = "最常用应用";
-"Sessions" = "时段数";
 "By hour" = "每小时分布";
 "Top apps" = "应用排行";
 "Recent activity" = "最近活动";
@@ -365,3 +364,58 @@
 "Click a day to open it" = "点一天可以打开它";
 "Sound and calls" = "声音和通话";
 "Which apps are playing sound or using the microphone, also in the background. Not what is played or said." = "记录哪些应用在播放声音或使用麦克风（包括在后台时），不记录播放或说话的内容。";
+
+/* 专注页、手动时段 */
+"STARTED BY HAND" = "手动时段";
+"Sessions" = "时段";
+"%@ session finished" = "“%@”时段结束了";
+"%@ done. Recording goes on as usual." = "已完成 %@。记录照常继续。";
+"%@ left" = "还剩 %@";
+"Stop" = "结束";
+"Everything you do now counts towards this tag" = "现在做的所有事都计入这个标签";
+"Until I stop it" = "直到我结束";
+"Start a session…" = "开始一个时段…";
+"None yet. A goal is a daily target for a tag, such as Study for at least 2 hours." = "还没有目标。目标是给某个标签定的每日指标，比如“学习至少 2 小时”。";
+"Start a session" = "开始一个时段";
+"From the moment you start until you stop, everything you do counts as the tag you pick, whatever the rules say. Use it for a game, a study block, or anything the rules cannot guess." = "从开始到结束，这期间做的所有事都算到你选的标签上，不管规则怎么判断。适合打游戏、集中学习，或者任何规则猜不出来的事。";
+"Count it as" = "计入";
+"For how long" = "时长";
+"Until I stop" = "不限时";
+"It runs until you press Stop." = "一直进行，直到你点“结束”。";
+"It ends by itself and lets you know." = "到时间自动结束，并提醒你。";
+"Start %@" = "开始“%@”";
+"Go back to today to start a session." = "回到今天才能开始时段。";
+"%@ session" = "“%@”时段";
+"since %@" = "%@ 开始";
+"left of %@" = "共 %@，剩余";
+"so far" = "已进行";
+"Everything you do now counts as %@." = "现在做的所有事都计入“%@”。";
+"Today's sessions" = "今天的时段";
+"Sessions that day" = "当天的时段";
+"Delete one and its records go back to their own tags" = "删除后，其中的记录恢复原来的标签";
+"No sessions. Records are tagged by the rules alone." = "没有手动时段，记录完全按规则打标签。";
+"now" = "现在";
+"planned %@" = "计划 %@";
+"running" = "进行中";
+"Delete this session" = "删除这个时段";
+
+/* 同步状态、应用列表 */
+"Sync failed" = "同步失败";
+"Synced at %@" = "已同步 · %@";
+"Syncs by itself every 5 minutes" = "每 5 分钟自动同步一次";
+"Syncs by itself every 5 minutes; next at about %@" = "每 5 分钟自动同步一次，下次约在 %@";
+"Apps that are recorded" = "记录哪些应用";
+"Switch an app off and time in it is not recorded at all" = "关掉某个应用的开关，在它里面的时间就完全不记录";
+"%d apps are switched off and not recorded" = "已关闭 %d 个应用，它们不会被记录";
+"Search apps" = "搜索应用";
+"YOUR APPS" = "你安装的应用";
+"SYSTEM APPS AND TOOLS" = "系统应用和工具";
+"No app matches the search." = "没有匹配的应用。";
+"%@ in 30 days" = "近 30 天 %@";
+"not recorded" = "不记录";
+
+"With no keyboard or mouse input for this long you count as away, unless you are on a call or the app in front is playing sound" = "键盘和鼠标无操作超过该时长记为离开；正在通话或前台应用在播放声音时除外";
+"Background sound counts too" = "后台有声音时也算在场";
+"Also stay counted while music or a podcast plays in the background. Leave it off if sound often plays when you are not at the Mac." = "后台在放音乐或播客时，也继续计时。如果你经常人不在电脑前但声音还在放，就保持关闭。";
+"no input, on a call in %@" = "无键鼠操作，正在 %@ 通话";
+"no input, %@ was playing" = "无键鼠操作，%@ 在播放";

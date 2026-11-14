@@ -6,6 +6,9 @@
 - **Sound and calls**: Trace notes which apps play sound or use the microphone, also in the background. While the app in front is making sound you are no longer counted as away.
 - **Focus**: deep work time, app switches per hour and what interrupted you, on the overview. Each tag counts as focus, neutral or distraction.
 - **Goals**: a daily target or limit per tag, shown as rings with streaks.
+- **Sessions**: press Start and pick a tag; until you stop, everything counts as that tag. Open-ended or timed, from the new Focus page, the sidebar or the menu bar.
+- **Being away**: a call, or sound from the app in front, keeps you counted as present; background sound can be made to count too. Away rows say what was playing.
+- **Settings**: every installed app is listed with a switch to leave it out, most used first; the Sync pane shows clearly when the last sync finished and when the next is due.
 - **Projects**: time per project, found from the folder each file is in.
 - **Review**: a few sentences on each week and month compared with the one before.
 - **Year calendar**: one square per day; click a day to open it.

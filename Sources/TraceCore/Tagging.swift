@@ -1,16 +1,20 @@
 import Foundation
 
-/// Applies tags to events. Rules decide automatically; changes made by hand
-/// on a single event override them. Tags are ordered by `sortOrder`, and the
-/// first one is the event's primary tag, the one charts are coloured by. A
-/// tag added by hand always comes before the automatic ones.
+/// Applies tags to events. Rules decide automatically; a session started by
+/// hand claims everything that happens while it runs; and changes made on a
+/// single event override both. The first tag is the event's primary tag,
+/// the one charts are coloured by: a tag added by hand, else the session's
+/// tag, else the first matching rule in `sortOrder`.
 public struct Tagger: Sendable {
     public let tags: [Tag]
     private let rulesByTag: [Int64: [Rule]]
     private let added: [Int64: Set<Int64>]
     private let removed: [Int64: Set<Int64>]
+    /// Sessions per device, sorted by start.
+    private let sessions: [String: [FocusSession]]
 
-    public init(tags: [Tag], rules: [Rule], manual: [ManualTag] = []) {
+    public init(tags: [Tag], rules: [Rule], manual: [ManualTag] = [], sessions: [FocusSession] = []) {
+        self.sessions = Dictionary(grouping: sessions, by: \.device).mapValues { $0.sorted { $0.start < $1.start } }
         self.tags = tags.filter(\.enabled).sorted { ($0.sortOrder, $0.id ?? 0) < ($1.sortOrder, $1.id ?? 0) }
         rulesByTag = Dictionary(grouping: rules, by: \.tagID)
         var added: [Int64: Set<Int64>] = [:], removed: [Int64: Set<Int64>] = [:]
@@ -32,19 +36,38 @@ public struct Tagger: Sendable {
         tags.filter { matches($0, event) }
     }
 
-    public func tags(for event: ActivityEvent) -> [Tag] {
-        guard let id = event.id, added[id] != nil || removed[id] != nil else { return automatic(for: event) }
-        let add = added[id] ?? [], rem = removed[id] ?? []
-        let manual = tags.filter { $0.id.map(add.contains) ?? false }
-        let auto = automatic(for: event).filter { tag in
-            guard let tagID = tag.id else { return false }
-            return !rem.contains(tagID) && !add.contains(tagID)
+    /// The tag of the session an event falls in, if any.
+    public func sessionTag(for event: ActivityEvent) -> Tag? {
+        guard let list = sessions[event.device], !list.isEmpty else { return nil }
+        // The last session that started at or before the event.
+        var low = 0, high = list.count
+        while low < high {
+            let mid = (low + high) / 2
+            if list[mid].start <= event.start { low = mid + 1 } else { high = mid }
         }
-        return manual + auto
+        guard low > 0, list[low - 1].contains(event.start, device: event.device) else { return nil }
+        let tagID = list[low - 1].tagID
+        return tags.first { $0.id == tagID }
+    }
+
+    public func tags(for event: ActivityEvent) -> [Tag] {
+        let session = sessionTag(for: event)
+        let overridden = event.id.map { added[$0] != nil || removed[$0] != nil } ?? false
+        guard session != nil || overridden else { return automatic(for: event) }
+        let add = event.id.flatMap { added[$0] } ?? [], rem = event.id.flatMap { removed[$0] } ?? []
+        var result = tags.filter { $0.id.map(add.contains) ?? false }
+        for tag in [session].compactMap({ $0 }) + automatic(for: event) {
+            guard let tagID = tag.id, !rem.contains(tagID), !result.contains(where: { $0.id == tagID }) else { continue }
+            result.append(tag)
+        }
+        return result
     }
 
     public func primary(for event: ActivityEvent) -> Tag? {
-        if let id = event.id, added[id] != nil || removed[id] != nil { return tags(for: event).first }
+        let overridden = event.id.map { added[$0] != nil || removed[$0] != nil } ?? false
+        if overridden || !sessions.isEmpty, sessions[event.device] != nil || overridden {
+            return tags(for: event).first
+        }
         return tags.first { matches($0, event) }
     }
 

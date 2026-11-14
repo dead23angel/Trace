@@ -41,6 +41,16 @@ public final class SyncEngine {
         var layer: Int?
     }
 
+    /// One session in `sessions.json`. The tag is named, not numbered,
+    /// because tag ids differ from Mac to Mac.
+    struct SessionEntry: Codable {
+        var start: Date
+        var end: Date?
+        var targetMinutes: Int?
+        var tagKey: String?
+        var tagName: String
+    }
+
     private let store: EventStore
     private let folder: URL
     private let deviceID: String
@@ -83,8 +93,9 @@ public final class SyncEngine {
         var result = Result()
         try fm.createDirectory(at: devicesFolder, withIntermediateDirectories: true)
         result.exportedDays = try exportOwn(now: now)
-        try importOthers(into: &result)
+        // Tags first: sessions of other Macs refer to tags by name.
         result.appliedTagging = try syncTagging()
+        try importOthers(into: &result)
         return result
     }
 
@@ -147,6 +158,18 @@ public final class SyncEngine {
         try store.setMeta("dirtyDays", nil)
         try store.setMeta("fullExport", nil)
 
+        let tags = Dictionary(uniqueKeysWithValues: try store.tags().compactMap { tag in tag.id.map { ($0, tag) } })
+        let sessions = try store.sessions().filter(\.device.isEmpty).compactMap { session -> SessionEntry? in
+            guard let tag = tags[session.tagID] else { return nil }
+            return SessionEntry(start: session.start, end: session.end, targetMinutes: session.targetMinutes,
+                                tagKey: tag.key, tagName: tag.name)
+        }
+        let sessionsFile = ownFolder.appendingPathComponent("sessions.json")
+        let sessionsData = try Self.encoder().encode(sessions)
+        if (try? Data(contentsOf: sessionsFile)) != sessionsData {
+            try sessionsData.write(to: sessionsFile, options: .atomic)
+        }
+
         let info = DeviceInfo(id: deviceID, name: deviceName, updated: now)
         try Self.encoder().encode(info).write(to: ownFolder.appendingPathComponent("device.json"), options: .atomic)
         return written
@@ -198,6 +221,16 @@ public final class SyncEngine {
                 }
                 try store.replaceRemote(device: id, day: day, stamp: stamp, with: imported)
                 result.importedDays += 1
+            }
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("sessions.json")),
+               let entries = try? decoder.decode([SessionEntry].self, from: data) {
+                let tags = try store.tags()
+                try store.replaceRemoteSessions(device: id, with: entries.compactMap { entry in
+                    let tag = tags.first { entry.tagKey != nil ? $0.key == entry.tagKey : ($0.key == nil && $0.name == entry.tagName) }
+                    return tag?.id.map {
+                        FocusSession(tagID: $0, start: entry.start, end: entry.end, targetMinutes: entry.targetMinutes)
+                    }
+                })
             }
             result.pendingFiles += pending.count
             // Days whose file has disappeared were deleted on that Mac.

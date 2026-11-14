@@ -30,6 +30,11 @@ final class ActivityWatcher: ObservableObject {
     /// Apps heard or on a call at the last sample.
     @Published private(set) var background: Set<AudioMonitor.Activity> = []
     private var audible: Set<String> = []
+    private var onCall = false
+    /// Whether sound from an app in the background also counts as being
+    /// there. Off: only the app in front, or a call, does.
+    var anySoundMeansPresent = false
+    private var breakNext = false
     private var resume: Timer?
 
     private let store: EventStore
@@ -74,6 +79,14 @@ final class ActivityWatcher: ObservableObject {
         tick()
     }
 
+    /// Makes the next sample open a new record, so that whatever comes after
+    /// this moment is kept apart from what came before. Used when a session
+    /// starts or stops.
+    func splitNow() {
+        breakNext = true
+        tick()
+    }
+
     /// Stops recording for `seconds`, then picks up again on its own.
     func pause(for seconds: TimeInterval) {
         isPaused = true
@@ -94,9 +107,11 @@ final class ActivityWatcher: ObservableObject {
         let front = NSWorkspace.shared.frontmostApplication
         let anyInput = CGEventType(rawValue: ~0)!
         let idleSeconds = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
-        // Watching a video or sitting in a call is not being away: as long as
-        // the app in front is making sound, the time counts.
-        let listening = front?.bundleIdentifier.map(audible.contains) ?? false
+        // No keyboard or mouse is not the same as not being there. Listening in
+        // on a call, or watching a video in the app in front, counts; music
+        // from the background counts only if the user says so.
+        let listening = onCall || (front?.bundleIdentifier.map(audible.contains) ?? false)
+            || (anySoundMeansPresent && !audible.isEmpty)
         sampleBackground(at: now)
         if idleSeconds >= idleThreshold && !listening {
             if !isIdle {
@@ -128,13 +143,15 @@ final class ActivityWatcher: ObservableObject {
         let pulse = Self.interval * 5
         let previous = lastWindow?.pid == pid ? lastWindow?.info : nil
         let (titles, files, urls) = (captureTitles, captureFiles, captureURLs)
+        let forceNew = breakNext
+        breakNext = false
         queue.async { [store] in
             let window = trusted
                 ? AXReader.focusedWindow(pid: pid, isBrowser: isBrowser && urls, previous: previous) : .init()
             let sample = Sample(bundleID: bundleID, appName: name, category: category,
                                 title: titles ? window.title : "",
                                 path: files ? window.path : nil, url: urls ? window.url : nil)
-            _ = try? store.heartbeat(sample, at: now, pulse: pulse)
+            _ = try? store.heartbeat(sample, at: now, pulse: pulse, forceNew: forceNew)
             DispatchQueue.main.async {
                 if self.current != sample { self.currentSince = now }
                 self.current = sample
@@ -150,6 +167,7 @@ final class ActivityWatcher: ObservableObject {
         guard captureBackground else {
             if !background.isEmpty { background = [] }
             audible = []
+            onCall = false
             return
         }
         let (excluded, pulse) = (excluded, Self.interval * 5)
@@ -159,6 +177,7 @@ final class ActivityWatcher: ObservableObject {
             DispatchQueue.main.async {
                 if self.background != active { self.background = active }
                 self.audible = Set(active.filter { $0.layer == .audio }.map(\.bundleID))
+                self.onCall = active.contains { $0.layer == .mic }
             }
         }
     }

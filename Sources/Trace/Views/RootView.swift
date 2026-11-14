@@ -6,6 +6,7 @@ extension Pane {
         switch self {
         case .overview: return L("Overview")
         case .timeline: return L("Timeline")
+        case .focus: return L("Focus")
         case .reports: return L("Reports")
         case .tags: return L("Tags")
         case .rules: return L("Rules")
@@ -16,6 +17,7 @@ extension Pane {
         switch self {
         case .overview: return "square.grid.2x2"
         case .timeline: return "list.bullet.indent"
+        case .focus: return "scope"
         case .reports: return "chart.bar"
         case .tags: return "tag"
         case .rules: return "line.3.horizontal.decrease"
@@ -39,6 +41,7 @@ struct RootView: View {
                     switch model.pane {
                     case .overview: OverviewView()
                     case .timeline: TimelineView()
+                    case .focus: FocusView()
                     case .reports: ReportsView()
                     case .tags: TagsView()
                     case .rules: RulesView()
@@ -184,6 +187,7 @@ private struct Sidebar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                if model.running != nil { RunningSessionPill() }
                 RecordingStatus()
             }
         }
@@ -260,5 +264,35 @@ struct PermissionBanner: View {
         .padding(14)
         .background(Theme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(EdgeInsets(top: 20, leading: 28, bottom: 0, trailing: 28))
+    }
+}
+
+/// The session that is running, with its clock and a stop button.
+struct RunningSessionPill: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        if let session = model.running, let tag = model.tags.first(where: { $0.id == session.tagID }) {
+            let elapsed = session.duration(at: model.clock)
+            HStack(spacing: 8) {
+                Swatch(tag, size: 8, round: true)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(tag.displayName).fontWeight(.semibold).lineLimit(1)
+                    Text(session.target.map { String(format: L("%@ left"), Fmt.clock($0 - elapsed)) } ?? Fmt.clock(elapsed))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 4)
+                Button(L("Stop")) { model.stopSession() }
+                    .buttonStyle(TRButtonStyle(kind: .bordered, height: 24))
+            }
+            .padding(10)
+            .background(Palette.color(tag).opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Palette.color(tag).opacity(0.5)))
+            .contentShape(Rectangle())
+            .onTapGesture { model.pane = .focus }
+            .help(L("Everything you do now counts towards this tag"))
+        }
     }
 }

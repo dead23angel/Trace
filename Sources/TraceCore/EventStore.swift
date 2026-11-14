@@ -102,6 +102,16 @@ public final class EventStore: @unchecked Sendable {
                 t.column("minutes", .integer).notNull()
             }
         }
+        migrator.registerMigration("v6") { db in
+            try db.create(table: "session") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("tagID", .integer).notNull().references("tag", onDelete: .cascade)
+                t.column("start", .datetime).notNull().indexed()
+                t.column("end", .datetime)
+                t.column("targetMinutes", .integer)
+                t.column("device", .text).notNull().defaults(to: "")
+            }
+        }
         try migrator.migrate(db)
         try seedPresetsIfNeeded()
         try addNewPresetRules()
@@ -115,9 +125,13 @@ public final class EventStore: @unchecked Sendable {
     /// seconds ago, it is extended; otherwise a new event starts. This keeps one
     /// row per stay instead of one row per sample.
     @discardableResult
-    public func heartbeat(_ sample: Sample, at now: Date, pulse: TimeInterval = 15) throws -> ActivityEvent {
+    ///
+    /// `forceNew` starts a new event even if nothing changed, so that a
+    /// session boundary falls between two events instead of inside one.
+    public func heartbeat(_ sample: Sample, at now: Date, pulse: TimeInterval = 15,
+                          forceNew: Bool = false) throws -> ActivityEvent {
         try db.write { db in
-            if var last = try ActivityEvent.filter(Column("device") == "" && Column("layer") == 0)
+            if !forceNew, var last = try ActivityEvent.filter(Column("device") == "" && Column("layer") == 0)
                 .order(Column("id").desc).fetchOne(db),
                last.matches(sample),
                now >= last.end,
@@ -302,6 +316,60 @@ public final class EventStore: @unchecked Sendable {
         }
     }
 
+    // MARK: Sessions
+
+    /// Every session, of this Mac and the others, oldest first.
+    public func sessions() throws -> [FocusSession] {
+        try db.read { db in try FocusSession.order(Column("start")).fetchAll(db) }
+    }
+
+    /// The session running on this Mac, if any.
+    public func runningSession() throws -> FocusSession? {
+        try db.read { db in
+            try FocusSession.filter(Column("device") == "" && Column("end") == nil).order(Column("start").desc).fetchOne(db)
+        }
+    }
+
+    /// Starts a session on this Mac, ending one that is still running.
+    @discardableResult
+    public func startSession(tagID: Int64, targetMinutes: Int? = nil, at now: Date = Date()) throws -> FocusSession {
+        try db.write { db in
+            try db.execute(sql: "UPDATE session SET end = ? WHERE device = '' AND end IS NULL", arguments: [now])
+            var session = FocusSession(tagID: tagID, start: now, targetMinutes: targetMinutes)
+            try session.insert(db)
+            return session
+        }
+    }
+
+    /// Ends the running session. Returns it, or nil if none was running.
+    @discardableResult
+    public func endSession(at now: Date = Date()) throws -> FocusSession? {
+        try db.write { db in
+            guard var session = try FocusSession.filter(Column("device") == "" && Column("end") == nil)
+                .order(Column("start").desc).fetchOne(db) else { return nil }
+            session.end = max(now, session.start)
+            try session.update(db)
+            return session
+        }
+    }
+
+    /// Removes a session; the records in it go back to their own tags.
+    public func deleteSession(id: Int64) throws {
+        _ = try db.write { db in try FocusSession.deleteOne(db, key: id) }
+    }
+
+    /// Replaces what is known about another Mac's sessions.
+    func replaceRemoteSessions(device: String, with sessions: [FocusSession]) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM session WHERE device = ?", arguments: [device])
+            for var session in sessions {
+                session.id = nil
+                session.device = device
+                try session.insert(db)
+            }
+        }
+    }
+
     // MARK: Goals
 
     public func goals() throws -> [Goal] {
@@ -326,7 +394,7 @@ public final class EventStore: @unchecked Sendable {
     }
 
     public func tagger() throws -> Tagger {
-        Tagger(tags: try tags(), rules: try rules(), manual: try manualTags())
+        Tagger(tags: try tags(), rules: try rules(), manual: try manualTags(), sessions: try sessions())
     }
 
     // MARK: Manual tags
@@ -461,6 +529,7 @@ public final class EventStore: @unchecked Sendable {
     public func removeRemoteData() throws {
         try db.write { db in
             try db.execute(sql: "DELETE FROM event WHERE device <> ''")
+            try db.execute(sql: "DELETE FROM session WHERE device <> ''")
             try db.execute(sql: "DELETE FROM syncState")
             _ = try SyncedDevice.deleteAll(db)
         }

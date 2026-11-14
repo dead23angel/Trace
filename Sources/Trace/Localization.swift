@@ -48,6 +48,13 @@ enum Fmt {
         return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 
+    /// A running clock: "23:45", "1:23:45".
+    static func clock(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded(.down)))
+        let (h, m, s) = (total / 3600, total / 60 % 60, total % 60)
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+    }
+
     /// Whole hours, for where there is little room: "180h".
     static func hours(_ seconds: TimeInterval) -> String {
         let h = Int((seconds / 3600).rounded())

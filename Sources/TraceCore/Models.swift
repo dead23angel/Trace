@@ -100,6 +100,46 @@ public enum TagRole: Int, Codable, Sendable, CaseIterable {
     }
 }
 
+/// A stretch of time the user marked by hand: from start to stop, whatever
+/// is in front counts as `tagID`. Optionally with a planned length.
+public struct FocusSession: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
+    public var id: Int64?
+    public var tagID: Int64
+    public var start: Date
+    /// Nil while the session is running.
+    public var end: Date?
+    /// Planned length in minutes; the session ends by itself when it is reached.
+    public var targetMinutes: Int?
+    /// The Mac the session was run on; empty for this Mac.
+    public var device: String = ""
+
+    public static let databaseTableName = "session"
+
+    public init(id: Int64? = nil, tagID: Int64, start: Date, end: Date? = nil, targetMinutes: Int? = nil, device: String = "") {
+        self.id = id
+        self.tagID = tagID
+        self.start = start
+        self.end = end
+        self.targetMinutes = targetMinutes
+        self.device = device
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+
+    public var isRunning: Bool { end == nil }
+    public var target: TimeInterval? { targetMinutes.map { TimeInterval($0 * 60) } }
+
+    /// Length so far, or in full once ended.
+    public func duration(at now: Date = Date()) -> TimeInterval { max(0, (end ?? now).timeIntervalSince(start)) }
+
+    /// Whether an event that started at `date` on `device` falls inside.
+    public func contains(_ date: Date, device: String) -> Bool {
+        device == self.device && date >= start && date < (end ?? .distantFuture)
+    }
+}
+
 /// A daily target for a tag: at least, or at most, so many minutes.
 public struct Goal: Codable, Identifiable, Hashable, Sendable, FetchableRecord, MutablePersistableRecord {
     public enum Kind: String, Codable, Sendable, CaseIterable { case atLeast, atMost }

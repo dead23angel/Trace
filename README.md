@@ -28,7 +28,7 @@ Trace sits in the menu bar and records which app, window, file and web page is i
 
 ### The day in lanes
 
-One lane per tag or app, with sound and calls underneath, so you can see what happened at the same time: coding with music on, or a meeting that ran in the background. Trace notes which apps are playing sound or using the microphone, never what is played or said. Watching a video without touching the keyboard no longer counts as being away.
+One lane per tag or app, with sound and calls underneath, so you can see what happened at the same time: coding with music on, or a meeting that ran in the background. Trace notes which apps are playing sound or using the microphone, never what is played or said. No keyboard or mouse does not mean you are away: while you are on a call, or the app in front is playing sound, the time still counts.
 
 ![The day as parallel lanes, with sound and calls below](docs/screenshots/lanes.png)
 
@@ -58,9 +58,15 @@ Eight built-in tags (Development, Office, Study, Communication, Entertainment, G
 |---|---|
 | ![Preset and custom tags](docs/screenshots/tags.png) | ![Rules and untagged activity](docs/screenshots/rules.png) |
 
-### Focus and goals
+### Focus, goals and sessions
 
-The overview shows how focused the day was: time in deep work (25 minutes or more of focus work in one go), how often you switched apps each hour, and which apps pulled you away most. Give a tag a daily goal, at least or at most so much, and follow it as a ring with a streak.
+The Focus page keeps three things together:
+
+- **Sessions.** Press Start, pick a tag, and from then until you stop, everything you do counts as that tag, whatever the rules say. Good for a game, a study block, or anything the rules cannot guess. A session can be open-ended or timed; a timed one ends by itself and tells you. Delete a session and its records go back to their own tags.
+- **Goals.** Give a tag a daily target, at least or at most so much, and follow it as a ring with a streak.
+- **How focused the day was.** Time in deep work (25 minutes or more of focus work in one go), how often you switched apps each hour, and which apps pulled you away most.
+
+![The Focus page: start a session, goals, and the day's focus](docs/screenshots/focus.png)
 
 ### Reports
 
@@ -142,7 +148,7 @@ Copy `Resources/zh-Hans.lproj` to `Resources/<code>.lproj`, translate the right-
 
 ## Known limitations
 
-- A silent video or a long read without touching the keyboard or mouse counts as away once the idle time has passed. With sound playing in the app in front, it does not.
+- A silent video or a long read without touching the keyboard or mouse counts as away once the idle time has passed. On a call, or with sound playing in the app in front, it does not; background music counts only if you turn that on in Settings.
 - Sound and calls are recognised by which app uses the speakers or the microphone. An app that keeps the microphone open without a call, such as a dictation tool, shows up as a call; exclude it in Settings.
 - Private browsing windows are not detected and are recorded like any other window. Exclude the browser or turn off web addresses if that matters to you.
 - Page addresses depend on what each browser exposes to the Accessibility API. Safari and Chromium-based browsers (Chrome, Edge, Arc, Brave) are covered; others may only report the window title.

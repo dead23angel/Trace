@@ -34,6 +34,9 @@ struct GanttCard: View {
                 }
 
                 axis(scale)
+                if let sessions = sessionRow {
+                    section(L("STARTED BY HAND"), rows: [sessions], scale: scale)
+                }
                 section(L("IN FRONT"), rows: gantt.rows, scale: scale)
                 if !gantt.background.isEmpty {
                     section(L("IN THE BACKGROUND"), rows: gantt.background, scale: scale)
@@ -47,6 +50,19 @@ struct GanttCard: View {
                 }
             }
         }
+    }
+
+    /// The sessions of the day as one lane.
+    private var sessionRow: GanttRow? {
+        let day = model.dayInterval
+        let bars = model.daySessions.compactMap { session -> GanttBar? in
+            let start = max(session.start, day.start), end = min(session.end ?? model.clock, day.end)
+            guard end > start, let tag = model.tags.first(where: { $0.id == session.tagID }) else { return nil }
+            return GanttBar(start: start, end: end, tag: tag, label: tag.displayName)
+        }
+        guard !bars.isEmpty else { return nil }
+        return GanttRow(id: "sessions", kind: .session, label: "", tag: nil, bundleID: nil,
+                        seconds: bars.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }, bars: bars)
     }
 
     private func firstMoment(_ gantt: Gantt) -> Date? {
@@ -106,6 +122,7 @@ struct GanttCard: View {
             case .audio: symbol("speaker.wave.2.fill")
             case .mic: symbol("phone.fill")
             case .device: symbol("laptopcomputer")
+            case .session: symbol("timer")
             }
             Text(name(row)).fontWeight(.medium).lineLimit(1)
             Spacer(minLength: 4)
@@ -122,6 +139,7 @@ struct GanttCard: View {
         case .tag: return tagName(row.tag)
         case .audio: return L("Sound")
         case .mic: return L("Calls")
+        case .session: return L("Sessions")
         default: return row.label
         }
     }
@@ -161,7 +179,7 @@ private struct GanttLane: View {
                                 if !bar.label.isEmpty, w > 54, row.kind != .tag {
                                     Text(bar.label)
                                         .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(row.kind == .app ? Color.white : Theme.ink)
+                                        .foregroundStyle(row.kind == .app || row.kind == .session ? Color.white : Theme.ink)
                                         .lineLimit(1)
                                         .padding(.horizontal, 5)
                                         .frame(width: w, alignment: .leading)

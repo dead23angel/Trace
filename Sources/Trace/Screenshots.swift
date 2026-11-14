@@ -39,6 +39,7 @@ enum Screenshots {
                     block.events.contains { $0.id == event?.id }
                 }?.start, event: event?.id)
             },
+            Shot(name: "focus") { $0.pane = .focus },
             Shot(name: "reports") { $0.showReport(.week) },
             Shot(name: "year") { $0.showReport(.year) },
             Shot(name: "tags") { $0.pane = .tags },

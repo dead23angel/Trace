@@ -94,12 +94,15 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
         }
-        row(L("Idle time"), L("With no keyboard or mouse input for this long, you count as away"), last: true) {
+        row(L("Idle time"), L("With no keyboard or mouse input for this long you count as away, unless you are on a call or the app in front is playing sound")) {
             Picker(L("Idle time"), selection: $model.idleMinutes) {
                 ForEach([1, 3, 5, 10, 15], id: \.self) { Text(String(format: L("%d min"), $0)).tag($0) }
             }
             .labelsHidden()
             .fixedSize()
+        }
+        row(L("Background sound counts too"), L("Also stay counted while music or a podcast plays in the background. Leave it off if sound often plays when you are not at the Mac."), last: true) {
+            Toggle(L("Background sound counts too"), isOn: $model.anySoundMeansPresent).toggleStyle(.switch).labelsHidden()
         }
     }
 
@@ -122,30 +125,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var privacy: some View {
-        row(L("Excluded apps"), L("Time in these apps is not recorded at all"), last: model.excludedApps.isEmpty) {
-            Menu(L("Add app")) {
-                ForEach(candidates, id: \.bundleID) { app in
-                    Button(app.name) { model.excludedApps.append(app.bundleID) }
-                }
-            }
-            .fixedSize()
-        }
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(model.excludedApps, id: \.self) { bundleID in
-                    HStack(spacing: 10) {
-                        AppIcon(bundleID: bundleID, size: 22)
-                        Text(Self.appName(bundleID))
-                        Text(bundleID).font(Theme.mono).foregroundStyle(Theme.muted).lineLimit(1)
-                        Spacer()
-                        Button(L("Remove")) { model.excludedApps.removeAll { $0 == bundleID } }
-                            .buttonStyle(TRButtonStyle(kind: .bordered, height: 26))
-                    }
-                    .padding(.vertical, 8)
-                    Hairline()
-                }
-            }
-        }
+        AppExclusionList()
     }
 
     @ViewBuilder private var sync: some View {
@@ -171,11 +151,8 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.trBordered)
             }
-            row(L("Status"), syncStatus) {
-                Button(model.isSyncing ? L("Syncing…") : L("Sync now")) { model.syncNow() }
-                    .buttonStyle(.trBordered)
-                    .disabled(model.isSyncing)
-            }
+            SyncStatusRow()
+            Hairline()
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(L("Macs")).fontWeight(.semibold)
@@ -206,12 +183,6 @@ struct SettingsView: View {
                 .buttonStyle(.trLink)
                 .font(.system(size: 12))
         }
-    }
-
-    private var syncStatus: String {
-        if let error = model.syncError { return error }
-        if let last = model.lastSync { return String(format: L("Last synced %@"), Fmt.time(last)) }
-        return model.isSyncing ? L("Syncing…") : L("Not synced yet")
     }
 
     private func deviceRow(name: Binding<String>, placeholder: String, note: String,
@@ -270,22 +241,6 @@ struct SettingsView: View {
             if !last { Hairline() }
         }
     }
-
-    private var candidates: [(name: String, bundleID: String)] {
-        NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular }
-            .compactMap { app in
-                guard let id = app.bundleIdentifier, id != Bundle.main.bundleIdentifier,
-                      !model.excludedApps.contains(id) else { return nil }
-                return (app.localizedName ?? id, id)
-            }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private static func appName(_ bundleID: String) -> String {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
-        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-    }
 }
 
 /// One other Mac in the Sync pane, with a name that can be changed here.
@@ -314,5 +269,192 @@ private struct DeviceNameRow: View {
         }
         .onAppear { name = device.displayName }
         .onChange(of: device.displayName) { name = device.displayName }
+    }
+}
+
+/// Whether the last sync worked, when it happened and when the next one is due.
+private struct SyncStatusRow: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                if model.isSyncing {
+                    ProgressView().controlSize(.small)
+                } else if model.syncError != nil {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.color(4))
+                } else if model.lastSync != nil {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ok)
+                } else {
+                    Image(systemName: "circle.dashed").foregroundStyle(Theme.muted)
+                }
+            }
+            .font(.system(size: 22))
+            .frame(width: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).fontWeight(.semibold).foregroundStyle(model.syncError == nil && model.lastSync != nil && !model.isSyncing ? Theme.ok : Theme.ink)
+                Text(note).font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(2)
+            }
+            Spacer(minLength: 12)
+            Button(model.isSyncing ? L("Syncing…") : L("Sync now")) { model.syncNow() }
+                .buttonStyle(.trBordered)
+                .disabled(model.isSyncing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var title: String {
+        if model.isSyncing { return L("Syncing…") }
+        if model.syncError != nil { return L("Sync failed") }
+        if let last = model.lastSync { return String(format: L("Synced at %@"), Fmt.time(last)) }
+        return L("Not synced yet")
+    }
+
+    private var note: String {
+        if let error = model.syncError { return error }
+        guard let next = model.nextSync else { return L("Syncs by itself every 5 minutes") }
+        return String(format: L("Syncs by itself every 5 minutes; next at about %@"), Fmt.time(next))
+    }
+}
+
+/// An app installed on this Mac.
+private struct InstalledApp: Identifiable, Hashable {
+    let bundleID: String
+    let name: String
+    /// Comes with macOS, or lives in a Utilities folder.
+    let isSystem: Bool
+    var id: String { bundleID }
+
+    /// Every app in the usual places, one entry per bundle identifier.
+    static func scan() -> [InstalledApp] {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        let roots: [(String, Bool)] = [("/Applications", false), ("\(home)/Applications", false),
+                                       ("/Applications/Utilities", true), ("/System/Applications", true),
+                                       ("/System/Applications/Utilities", true)]
+        var found: [String: InstalledApp] = [:]
+        func add(_ path: String, system: Bool) {
+            guard let bundle = Bundle(path: path), let id = bundle.bundleIdentifier,
+                  id != Bundle.main.bundleIdentifier, found[id] == nil else { return }
+            let name = fm.displayName(atPath: path).replacingOccurrences(of: ".app", with: "")
+            found[id] = InstalledApp(bundleID: id, name: name, isSystem: system)
+        }
+        for (root, system) in roots {
+            for item in (try? fm.contentsOfDirectory(atPath: root)) ?? [] {
+                let path = "\(root)/\(item)"
+                if item.hasSuffix(".app") {
+                    add(path, system: system)
+                } else if !item.hasPrefix("."), item != "Utilities" {
+                    // One level down, for suites that install into a folder.
+                    for inner in (try? fm.contentsOfDirectory(atPath: path)) ?? [] where inner.hasSuffix(".app") {
+                        add("\(path)/\(inner)", system: system)
+                    }
+                }
+            }
+        }
+        return Array(found.values)
+    }
+}
+
+/// Every installed app with a switch: on is recorded, off is left out.
+/// The apps used most come first; what ships with macOS is listed apart.
+private struct AppExclusionList: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var apps: [InstalledApp] = []
+    @State private var usage: [String: TimeInterval] = [:]
+    @State private var search = ""
+    @State private var isLoading = true
+
+    var body: some View {
+        let excluded = Set(model.excludedApps)
+        let shown = apps.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(L("Apps that are recorded")).fontWeight(.semibold)
+                    Text(excluded.isEmpty ? L("Switch an app off and time in it is not recorded at all")
+                                          : String(format: L("%d apps are switched off and not recorded"), excluded.count))
+                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                }
+                Spacer(minLength: 12)
+                SearchField(text: $search, placeholder: L("Search apps"), width: 140)
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
+                    if isLoading {
+                        ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 30)
+                    }
+                    section(L("YOUR APPS"), shown.filter { !$0.isSystem }, excluded)
+                    section(L("SYSTEM APPS AND TOOLS"), shown.filter(\.isSystem), excluded)
+                    if !isLoading && shown.isEmpty {
+                        Text(L("No app matches the search.")).foregroundStyle(Theme.muted).padding(.vertical, 12)
+                    }
+                }
+                .padding(.trailing, 6)
+            }
+        }
+        .task { await load() }
+    }
+
+    @ViewBuilder private func section(_ title: String, _ apps: [InstalledApp], _ excluded: Set<String>) -> some View {
+        if !apps.isEmpty {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.4)
+                .foregroundStyle(Theme.muted)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            ForEach(apps) { app in
+                let isOn = !excluded.contains(app.bundleID)
+                HStack(spacing: 10) {
+                    AppIcon(bundleID: app.bundleID, size: 24)
+                    Text(app.name).lineLimit(1).foregroundStyle(isOn ? Theme.ink : Theme.muted)
+                    if let seconds = usage[app.bundleID], seconds >= 60 {
+                        Text(String(format: L("%@ in 30 days"), Fmt.duration(seconds)))
+                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 8)
+                    if !isOn {
+                        Text(L("not recorded")).font(.system(size: 12)).foregroundStyle(Palette.color(3))
+                    }
+                    Toggle(app.name, isOn: Binding(get: { isOn }, set: { on in
+                        if on {
+                            model.excludedApps.removeAll { $0 == app.bundleID }
+                        } else if !model.excludedApps.contains(app.bundleID) {
+                            model.excludedApps.append(app.bundleID)
+                        }
+                    }))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+                }
+                .padding(.vertical, 6)
+                Hairline()
+            }
+        }
+    }
+
+    private func load() async {
+        let month = DateInterval(start: Date().addingTimeInterval(-30 * 86_400), end: Date())
+        var totals: [String: TimeInterval] = [:]
+        var names: [String: String] = [:]
+        for event in model.events(in: month) where event.isLocal {
+            totals[event.bundleID, default: 0] += Analyzer.clipped(event, to: month)
+            names[event.bundleID] = event.appName
+        }
+        var found = await Task.detached(priority: .userInitiated) { InstalledApp.scan() }.value
+        // Apps that were recorded or switched off but are not in the usual places.
+        let known = Set(found.map(\.bundleID))
+        for id in Set(totals.keys).union(model.excludedApps) where !known.contains(id) && id != Bundle.main.bundleIdentifier {
+            let name = names[id] ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+                .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") } ?? id
+            found.append(InstalledApp(bundleID: id, name: name, isSystem: false))
+        }
+        usage = totals
+        apps = found.sorted {
+            let (a, b) = (totals[$0.bundleID] ?? 0, totals[$1.bundleID] ?? 0)
+            return a != b ? a > b : $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        isLoading = false
     }
 }

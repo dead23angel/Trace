@@ -662,4 +662,77 @@ final class TraceCoreTests: XCTestCase {
         XCTAssertEqual(review.previousDeepSeconds, 60 * 60, accuracy: 0.001)
         XCTAssertEqual(review.bestFocusDay?.day, current.start)
     }
+
+    // MARK: Sessions
+
+    func testSessionClaimsEverythingBetweenStartAndStop() throws {
+        let store = try EventStore()
+        let games = try XCTUnwrap(store.tags().first { $0.key == "games" })
+        let day = DateInterval(start: t0 - 10, duration: 86_400)
+
+        try store.heartbeat(xcode("A.swift"), at: t0)
+        try store.heartbeat(xcode("A.swift"), at: t0 + 10)
+        // Start: the next sample opens a new record even though nothing changed.
+        let session = try store.startSession(tagID: games.id!, at: t0 + 12)
+        try store.heartbeat(xcode("A.swift"), at: t0 + 12, forceNew: true)
+        try store.heartbeat(xcode("A.swift"), at: t0 + 20)
+        try store.heartbeat(mail(), at: t0 + 30)
+        try store.heartbeat(mail(), at: t0 + 40)
+        XCTAssertEqual(try store.runningSession()?.id, session.id)
+        try store.endSession(at: t0 + 45)
+        try store.heartbeat(mail(), at: t0 + 45, forceNew: true)
+        try store.heartbeat(mail(), at: t0 + 60)
+        XCTAssertNil(try store.runningSession())
+
+        let events = try store.events(from: t0 - 1, to: t0 + 100)
+        XCTAssertEqual(events.count, 4)
+        var tagger = try store.tagger()
+        XCTAssertEqual(events.map { tagger.primary(for: $0)?.key }, ["dev", "games", "games", "comm"])
+        // The record keeps its own tag as well, after the session's.
+        XCTAssertEqual(tagger.tags(for: events[1]).map(\.key), ["games", "dev"])
+        XCTAssertEqual(Analyzer.summarize(events, in: day, tagger: tagger).byTag.first?.tag?.key, "games")
+
+        // A tag put on one record by hand still wins; removing the session's tag works too.
+        let study = try XCTUnwrap(store.tags().first { $0.key == "study" })
+        try store.setManualTag(eventID: events[1].id!, tagID: study.id!)
+        try store.setManualTag(eventID: events[2].id!, tagID: games.id!, removed: true)
+        tagger = try store.tagger()
+        XCTAssertEqual(tagger.primary(for: events[1])?.key, "study")
+        XCTAssertEqual(tagger.primary(for: events[2])?.key, "comm")
+
+        // Deleting the session gives the records back their own tags.
+        try store.clearManualTag(eventID: events[1].id!, tagID: study.id!)
+        try store.deleteSession(id: session.id!)
+        XCTAssertEqual(try store.tagger().primary(for: events[1])?.key, "dev")
+    }
+
+    func testStartingASessionEndsTheRunningOneAndSessionsSync() throws {
+        let folder = try tempFolder()
+        let a = try EventStore(), b = try EventStore()
+        let games = try XCTUnwrap(a.tags().first { $0.key == "games" })
+        let study = try XCTUnwrap(a.tags().first { $0.key == "study" })
+        try a.startSession(tagID: games.id!, at: t0)
+        try a.heartbeat(xcode("A.swift"), at: t0 + 5)
+        try a.heartbeat(xcode("A.swift"), at: t0 + 15)
+        let second = try a.startSession(tagID: study.id!, targetMinutes: 120, at: t0 + 100)
+        let all = try a.sessions()
+        XCTAssertEqual(all.count, 2)
+        XCTAssertEqual(all[0].end, t0 + 100)
+        XCTAssertTrue(all[1].isRunning)
+        XCTAssertEqual(second.target, 7200)
+        XCTAssertEqual(all[1].duration(at: t0 + 160), 60, accuracy: 0.001)
+
+        _ = try SyncEngine(store: a, folder: folder, deviceID: "a", deviceName: "A", calendar: utc).sync(now: t0 + 200)
+        _ = try SyncEngine(store: b, folder: folder, deviceID: "b", deviceName: "B", calendar: utc).sync(now: t0 + 200)
+        let inB = try b.sessions()
+        XCTAssertEqual(inB.map(\.device), ["a", "a"])
+        XCTAssertEqual(inB[1].targetMinutes, 120)
+        // A's record shows as Games on B; a record of B's at the same time is untouched.
+        try b.heartbeat(xcode("B.swift"), at: t0 + 6)
+        let events = try b.events(from: t0 - 1, to: t0 + 50)
+        let tagger = try b.tagger()
+        XCTAssertEqual(events.map { "\($0.device):\(tagger.primary(for: $0)?.key ?? "")" }, ["a:games", ":dev"])
+        // B has no session of its own running.
+        XCTAssertNil(try b.runningSession())
+    }
 }

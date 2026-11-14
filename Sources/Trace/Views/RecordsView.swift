@@ -101,13 +101,24 @@ struct RecordsView: View {
                 Text("\(Fmt.time(from)) – \(Fmt.time(to))").foregroundStyle(Theme.muted).frame(width: 96, alignment: .leading)
                 Swatch(color: Theme.line)
                 Text(L("Away")).fontWeight(.semibold).foregroundStyle(Theme.muted)
-                Text(L("no keyboard or mouse input")).font(.system(size: 12)).foregroundStyle(Theme.muted)
+                Text(awayNote(from: from, to: to)).font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
                 Spacer()
                 Text(Fmt.duration(to.timeIntervalSince(from))).fontWeight(.semibold).foregroundStyle(Theme.muted)
             }
             .frame(minHeight: 44)
             Hairline()
         }
+    }
+
+    /// What was going on while nothing was typed or clicked: sound that
+    /// kept playing, a call, or nothing at all.
+    private func awayNote(from: Date, to: Date) -> String {
+        let during = model.background.filter { $0.end > from && $0.start < to && min($0.end, to).timeIntervalSince(max($0.start, from)) >= 30 }
+        let calls = Set(during.filter { $0.layer == Layer.mic.rawValue }.map(\.appName)).sorted()
+        let sound = Set(during.filter { $0.layer == Layer.audio.rawValue }.map(\.appName)).sorted()
+        if !calls.isEmpty { return String(format: L("no input, on a call in %@"), calls.joined(separator: L(", "))) }
+        if !sound.isEmpty { return String(format: L("no input, %@ was playing"), sound.joined(separator: L(", "))) }
+        return L("no keyboard or mouse input")
     }
 
     private func group(_ block: Block, isOpen: Bool, selected: ActivityEvent?) -> some View {

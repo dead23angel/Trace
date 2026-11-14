@@ -70,6 +70,24 @@ struct MenuBarView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.bg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
+            if model.running != nil {
+                RunningSessionPill()
+            } else {
+                Menu {
+                    ForEach(model.tags.filter(\.enabled)) { tag in
+                        Menu(tag.displayName) {
+                            Button(L("Until I stop it")) { model.startSession(tag, minutes: nil) }
+                            ForEach([25, 50, 60, 120], id: \.self) { minutes in
+                                Button(Fmt.duration(TimeInterval(minutes * 60))) { model.startSession(tag, minutes: minutes) }
+                            }
+                        }
+                    }
+                } label: {
+                    Label(L("Start a session…"), systemImage: "timer")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
             HStack(spacing: 8) {
                 Button(watcher.isPaused ? L("Resume") : L("Pause 15 minutes")) {
                     if watcher.isPaused { watcher.isPaused = false } else { watcher.pause(for: 15 * 60) }

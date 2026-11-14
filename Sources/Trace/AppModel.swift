@@ -11,7 +11,7 @@ enum Appearance: String, CaseIterable, Identifiable {
 }
 
 enum Pane: String, CaseIterable, Identifiable {
-    case overview, timeline, reports, tags, rules
+    case overview, timeline, focus, reports, tags, rules
     var id: String { rawValue }
 }
 
@@ -71,6 +71,15 @@ final class AppModel: ObservableObject {
     /// Days in a row each goal has been met, keyed by goal id.
     @Published private(set) var streaks: [Int64: Int] = [:]
     let projects = ProjectResolver()
+    /// Sessions started by hand, on this Mac and the others.
+    @Published private(set) var sessions: [FocusSession] = []
+    /// The session running on this Mac.
+    @Published private(set) var running: FocusSession?
+    /// The present moment, refreshed every second while a session runs.
+    @Published private(set) var clock = Date()
+    private var sessionTimer: Timer?
+    /// When the next automatic sync is due.
+    @Published private(set) var nextSync: Date?
     @Published private(set) var yesterdayTotal: TimeInterval = 0
     @Published private(set) var tags: [Tag] = []
     @Published private(set) var rules: [Rule] = []
@@ -95,6 +104,9 @@ final class AppModel: ObservableObject {
     }
     @Published var captureBackground: Bool {
         didSet { UserDefaults.standard.set(captureBackground, forKey: "captureBackground"); watcher.captureBackground = captureBackground }
+    }
+    @Published var anySoundMeansPresent: Bool {
+        didSet { UserDefaults.standard.set(anySoundMeansPresent, forKey: "anySoundMeansPresent"); watcher.anySoundMeansPresent = anySoundMeansPresent }
     }
     @Published var captureURLs: Bool {
         didSet { UserDefaults.standard.set(captureURLs, forKey: "captureURLs"); watcher.captureURLs = captureURLs }
@@ -144,6 +156,7 @@ final class AppModel: ObservableObject {
         captureFiles = defaults.bool(forKey: "captureFiles")
         captureURLs = defaults.bool(forKey: "captureURLs")
         captureBackground = defaults.bool(forKey: "captureBackground")
+        anySoundMeansPresent = defaults.bool(forKey: "anySoundMeansPresent")
         excludedApps = defaults.stringArray(forKey: "excludedApps") ?? []
         if let id = defaults.string(forKey: "deviceID") {
             deviceID = id
@@ -193,9 +206,19 @@ final class AppModel: ObservableObject {
         watcher.captureFiles = captureFiles
         watcher.captureURLs = captureURLs
         watcher.captureBackground = captureBackground
+        watcher.anySoundMeansPresent = anySoundMeansPresent
         watcher.excluded = Set(excludedApps)
 
         L10n.apply(language)
+        if demo, let tags = try? store.tags(), let study = tags.first(where: { $0.key == "study" })?.id,
+           let games = tags.first(where: { $0.key == "games" })?.id {
+            // Two sessions on the demo day: a timed one and an open one.
+            let day = Calendar.current.startOfDay(for: Date())
+            _ = try? store.startSession(tagID: study, targetMinutes: 50, at: day.addingTimeInterval(790 * 60))
+            _ = try? store.endSession(at: day.addingTimeInterval(840 * 60))
+            _ = try? store.startSession(tagID: games, at: day.addingTimeInterval(1150 * 60))
+            _ = try? store.endSession(at: day.addingTimeInterval(1185 * 60))
+        }
         if demo {
             // Always a full day, whatever the clock says, so the demo never looks empty.
             let evening = Calendar.current.startOfDay(for: Date()).addingTimeInterval(21 * 3600)
@@ -215,8 +238,13 @@ final class AppModel: ObservableObject {
         if !demo {
             watcher.start()
             let sync = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.syncNow() }
+                Task { @MainActor in
+                    self?.nextSync = Date().addingTimeInterval(300)
+                    self?.syncNow()
+                }
             }
+            nextSync = Date().addingTimeInterval(300)
+            runSessionTimer()
             RunLoop.main.add(sync, forMode: .common)
             syncTimer = sync
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.syncNow() }
@@ -260,7 +288,9 @@ final class AppModel: ObservableObject {
         let interval = dayInterval
         tags = (try? store.tags()) ?? []
         rules = (try? store.rules()) ?? []
-        tagger = Tagger(tags: tags, rules: rules, manual: (try? store.manualTags()) ?? [])
+        sessions = (try? store.sessions()) ?? []
+        running = sessions.last { $0.device.isEmpty && $0.isRunning }
+        tagger = Tagger(tags: tags, rules: rules, manual: (try? store.manualTags()) ?? [], sessions: sessions)
         events = events(in: interval)
         if devices.isEmpty {
             deviceTotals = [:]
@@ -315,6 +345,69 @@ final class AppModel: ObservableObject {
         // "At most" is only settled when the day is over.
         let metToday = goal.kind == .atLeast ? goal.isMet(by: spent) : (!isToday && summary.total > 0 && goal.isMet(by: spent))
         return before + (metToday ? 1 : 0)
+    }
+
+    // MARK: Sessions
+
+    /// Sessions that overlap the selected day, for the Macs being shown.
+    var daySessions: [FocusSession] {
+        let day = dayInterval
+        return sessions.filter { session in
+            (deviceFilter == nil || session.device == deviceFilter)
+                && session.start < day.end && (session.end ?? clock) > day.start
+        }
+    }
+
+    /// From now until stopped (or for `minutes`), everything counts as `tag`.
+    func startSession(_ tag: Tag, minutes: Int?) {
+        guard let id = tag.id, !isDemo else { return }
+        _ = try? store.startSession(tagID: id, targetMinutes: minutes)
+        watcher.splitNow()
+        if minutes != nil { Notifier.prepare() }
+        changed()
+        runSessionTimer()
+    }
+
+    func stopSession() {
+        guard let ended = try? store.endSession() else { return }
+        _ = ended
+        watcher.splitNow()
+        changed()
+        runSessionTimer()
+    }
+
+    func deleteSession(_ session: FocusSession) {
+        guard let id = session.id else { return }
+        try? store.deleteSession(id: id)
+        if session.isRunning { watcher.splitNow() }
+        changed()
+        runSessionTimer()
+    }
+
+    /// Ticks once a second while a session runs, and ends a timed session
+    /// when its time is up.
+    private func runSessionTimer() {
+        clock = Date()
+        guard running != nil else {
+            sessionTimer?.invalidate()
+            sessionTimer = nil
+            return
+        }
+        guard sessionTimer == nil else { return }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.clock = Date()
+                if let session = self.running, let target = session.target, session.duration(at: self.clock) >= target {
+                    let name = self.tags.first { $0.id == session.tagID }?.displayName ?? ""
+                    self.stopSession()
+                    Notifier.post(title: String(format: L("%@ session finished"), name),
+                                  body: String(format: L("%@ done. Recording goes on as usual."), Fmt.duration(target)))
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        sessionTimer = timer
     }
 
     func gantt(_ grouping: GanttGrouping) -> Gantt {

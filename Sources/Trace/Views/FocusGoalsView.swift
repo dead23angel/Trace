@@ -23,28 +23,46 @@ extension Goal {
 /// Daily goals as progress rings, with the day's streak.
 struct GoalsCard: View {
     @EnvironmentObject private var model: AppModel
+    /// On the overview: adds a way to the Focus page.
+    var showsFocusLink = false
     @State private var editing: Tag?
     @State private var adding = false
 
     var body: some View {
         Card(padding: .hv(20, 14)) {
-            HStack(spacing: 22) {
-                Text(L("Goals")).font(.system(size: 14, weight: .semibold))
-                ForEach(model.goals) { goal in
-                    if let tag = model.tags.first(where: { $0.id == goal.tagID }) {
-                        Button { editing = tag } label: { GoalRing(goal: goal, tag: tag) }
-                            .buttonStyle(.plain)
-                            .popover(isPresented: Binding(get: { editing?.id == tag.id }, set: { if !$0 { editing = nil } })) {
-                                GoalEditor(tag: tag) { editing = nil }.environmentObject(model)
-                            }
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Text(L("Goals")).font(.system(size: 14, weight: .semibold))
+                    if model.goals.isEmpty {
+                        Text(L("None yet. A goal is a daily target for a tag, such as Study for at least 2 hours."))
+                            .font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Button(model.goals.isEmpty ? L("Set a daily goal") : L("Add goal")) { adding = true }
+                        .buttonStyle(TRButtonStyle(kind: model.goals.isEmpty ? .prominent : .bordered, height: 28))
+                        .popover(isPresented: $adding) {
+                            GoalEditor(tag: nil) { adding = false }.environmentObject(model)
+                        }
+                    if showsFocusLink {
+                        Button { model.pane = .focus } label: {
+                            Label(L("Start a session"), systemImage: "timer")
+                        }
+                        .buttonStyle(TRButtonStyle(kind: .bordered, height: 28))
                     }
                 }
-                Spacer(minLength: 0)
-                Button(model.goals.isEmpty ? L("Set a daily goal") : L("Add goal")) { adding = true }
-                    .buttonStyle(.trLink)
-                    .popover(isPresented: $adding) {
-                        GoalEditor(tag: nil) { adding = false }.environmentObject(model)
+                if !model.goals.isEmpty {
+                    FlowLayout(spacing: 22) {
+                        ForEach(model.goals) { goal in
+                            if let tag = model.tags.first(where: { $0.id == goal.tagID }) {
+                                Button { editing = tag } label: { GoalRing(goal: goal, tag: tag) }
+                                    .buttonStyle(.plain)
+                                    .popover(isPresented: Binding(get: { editing?.id == tag.id }, set: { if !$0 { editing = nil } })) {
+                                        GoalEditor(tag: tag) { editing = nil }.environmentObject(model)
+                                    }
+                            }
+                        }
                     }
+                }
             }
         }
     }
@@ -78,11 +96,12 @@ private struct GoalRing: View {
             }
             .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 0) {
-                Text(tag.displayName).fontWeight(.semibold).lineLimit(1)
+                Text(tag.displayName).fontWeight(.semibold).lineLimit(1).fixedSize()
                 Text("\(Fmt.duration(spent)) / \(goal.summary)")
                     .font(.system(size: 12))
                     .foregroundStyle(over ? color : Theme.muted)
                     .lineLimit(1)
+                    .fixedSize()
                 if streak >= 2 {
                     Text(String(format: L("%d days in a row"), streak))
                         .font(.system(size: 11, weight: .semibold))
