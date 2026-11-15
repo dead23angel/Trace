@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- **Faster**: switching between the timeline views no longer stalls. Tag rules are worked out once per record instead of on every redraw.
+- **New look**: softer tag colours, lighter cards, quieter buttons and search fields, a translucent sidebar, and short animations when switching pages and views. The menu bar panel sits on the plain menu background.
+- **Less small print**: the explanations next to section titles now show when the pointer rests on the title. Deleting a session asks first and says there what happens to its records.
+- **Tags in the sidebar**: click a tag to open the timeline for that tag alone; click it again to show everything. The tag buttons now sit above every timeline view and include untagged time.
+- **Guide**: five short pages after setup on what Trace does and where to look. Open it again from Help › Show the guide.
+- **Chinese**: the lanes view is now called 轨迹.
+- **License**: from this version Trace is released under GPL-3.0. Earlier versions remain under the MIT license.
+
 ## 0.2.1
 
 - **All open apps**: besides the app in front, Trace now notes every app that is open while you are at the Mac and whether its window is on screen. The lanes view gets one lane per open app, solid while a window was on screen and faint while it was out of sight. It does not add to tracked time and can be switched off under Settings › What is recorded.
