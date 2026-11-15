@@ -122,7 +122,7 @@ struct MenuBarView: View {
             separator
             VStack(spacing: 0) {
                 if model.running != nil {
-                    RunningSessionPill().padding(.horizontal, 8).padding(.vertical, 4)
+                    RunningSessionPill(plain: true).padding(.horizontal, 14).padding(.vertical, 5)
                 } else {
                     Menu {
                         ForEach(model.tags.filter(\.enabled)) { tag in
@@ -166,6 +166,7 @@ struct MenuBarView: View {
             .padding(.bottom, 5)
         }
         .frame(width: 300)
+        .background(MaterialBackground(material: .menu).ignoresSafeArea())
         .font(.system(size: 13))
         .monospacedDigit()
         .onAppear { model.goToToday(); model.reload() }

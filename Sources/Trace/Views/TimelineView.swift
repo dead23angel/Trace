@@ -19,7 +19,7 @@ struct TimelineView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        let events = model.events.filter(model.passesFilter)
+        let events = model.filteredEvents
         Page {
             PageHeader(title: L("Timeline"), subtitle: subtitle(events.count)) {
                 HStack(spacing: 4) {
@@ -88,7 +88,7 @@ private struct OutlineCard: View {
 
     var body: some View {
         let interval = model.selection ?? model.dayInterval
-        let nodes = Analyzer.tree(events, in: interval, tagger: model.tagger, mode: mode, projects: model.projects)
+        let nodes = model.tree(mode, in: interval)
         let total = nodes.reduce(0) { $0 + $1.seconds }
         let peak = nodes.map(\.seconds).max() ?? 1
         Card(padding: EdgeInsets(top: 16, leading: 12, bottom: 12, trailing: 12)) {
@@ -96,6 +96,7 @@ private struct OutlineCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(model.selection == nil ? L("All activity") : L("Selected period"))
                         .font(.system(size: 14, weight: .semibold))
+                        .help(hint)
                     Text(Fmt.duration(total)).font(.system(size: 20, weight: .bold)).tracking(-0.2)
                     if let selection = model.selection {
                         Button { model.selection = nil } label: {
@@ -113,10 +114,6 @@ private struct OutlineCard: View {
                         .help(L("Show the whole day"))
                     }
                     Spacer()
-                    Text(hint)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
                 }
                 .padding(EdgeInsets(top: 0, leading: 8, bottom: 10, trailing: 8))
 
@@ -238,15 +235,8 @@ private struct DayColumnCard: View {
         let height = CGFloat(scale.hours.count - 1) * hourHeight
         Card(padding: EdgeInsets(top: 16, leading: 12, bottom: 16, trailing: 16)) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    SectionTitle(title: L("Day timeline"))
-                    Spacer()
-                    Text(L("Click a block or drag to pick a period"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
-                }
-                .padding(.leading, 8)
+                SectionTitle(title: L("Day timeline"), note: L("Click a block or drag to pick a period"))
+                    .padding(.leading, 8)
 
                 HStack(alignment: .top, spacing: 8) {
                     ZStack(alignment: .topTrailing) {

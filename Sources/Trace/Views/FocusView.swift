@@ -143,13 +143,13 @@ private struct SessionCard: View {
 /// The sessions of the day; deleting one gives its records back their tags.
 private struct SessionListCard: View {
     @EnvironmentObject private var model: AppModel
+    @State private var deleting: FocusSession?
 
     var body: some View {
         let sessions = model.daySessions
         Card {
             VStack(alignment: .leading, spacing: 0) {
-                SectionTitle(title: model.isToday ? L("Today's sessions") : L("Sessions that day"),
-                             note: sessions.isEmpty ? "" : L("Delete one and its records go back to their own tags"))
+                SectionTitle(title: model.isToday ? L("Today's sessions") : L("Sessions that day"))
                     .padding(.bottom, 8)
                 if sessions.isEmpty {
                     Hairline()
@@ -161,6 +161,14 @@ private struct SessionListCard: View {
                     row(session)
                 }
             }
+        }
+        .confirmationDialog(L("Delete this session?"),
+                            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            presenting: deleting) { session in
+            Button(L("Delete"), role: .destructive) { model.deleteSession(session) }
+            Button(L("Cancel"), role: .cancel) {}
+        } message: { _ in
+            Text(L("Its records are kept and go back to their own tags."))
         }
     }
 
@@ -184,7 +192,7 @@ private struct SessionListCard: View {
             Spacer(minLength: 8)
             Text(Fmt.duration(session.duration(at: model.clock))).fontWeight(.semibold)
             if session.device.isEmpty {
-                Button { model.deleteSession(session) } label: {
+                Button { deleting = session } label: {
                     Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(Theme.muted)
                         .frame(width: 24, height: 24).contentShape(Rectangle())
                 }

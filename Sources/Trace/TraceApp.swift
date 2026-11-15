@@ -18,6 +18,14 @@ struct TraceApp: App {
         }
         .defaultSize(width: 1360, height: 900)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandGroup(replacing: .help) {
+                Button(L("Show the guide")) {
+                    AppDelegate.shared?.showMain()
+                    model.showsTour = true
+                }
+            }
+        }
 
         MenuBarExtra {
             MenuBarView()

@@ -13,7 +13,7 @@ struct RulesView: View {
         let rules = model.rules.sorted { (order[$0.tagID] ?? 0, $0.id ?? 0) < (order[$1.tagID] ?? 0, $1.id ?? 0) }
         Page {
             PageHeader(title: L("Rules"),
-                       subtitle: L("Matching activity is tagged automatically; rules are checked from top to bottom")) {
+                       hint: L("Matching activity is tagged automatically; rules are checked from top to bottom")) {
                 Button(L("New rule")) { showsForm = true }.buttonStyle(.trProminent)
             }
             if showsForm || model.ruleDraft != nil {

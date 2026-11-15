@@ -33,10 +33,7 @@ struct GoalsCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     Text(L("Goals")).font(.system(size: 14, weight: .semibold))
-                    if model.goals.isEmpty {
-                        Text(L("None yet. A goal is a daily target for a tag, such as Study for at least 2 hours."))
-                            .font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(2)
-                    }
+                        .help(L("A goal is a daily target for a tag, such as Study for at least 2 hours."))
                     Spacer(minLength: 0)
                     Button(model.goals.isEmpty ? L("Set a daily goal") : L("Add goal")) { adding = true }
                         .buttonStyle(TRButtonStyle(kind: model.goals.isEmpty ? .prominent : .bordered, height: 28))

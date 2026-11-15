@@ -19,7 +19,7 @@ struct TagsView: View {
         let customs = model.tags.filter { !$0.isPreset }
         Page {
             PageHeader(title: L("Tags"),
-                       subtitle: L("A record can carry several tags; automatic ones can always be changed")) {
+                       hint: L("A record can carry several tags; automatic ones can always be changed")) {
                 Button(L("New tag")) { showsForm = true }.buttonStyle(.trProminent)
             }
             VStack(alignment: .leading, spacing: 10) {

@@ -38,13 +38,16 @@ struct RootView: View {
                 .environmentObject(watcher)
                 .interactiveDismissDisabled()
         }
+        .sheet(isPresented: $model.showsTour) {
+            TourView().environmentObject(model)
+        }
     }
 
     private var content: some View {
         HStack(spacing: 0) {
             Sidebar()
                 .frame(width: 220)
-                .background(Theme.side)
+                .background(MaterialBackground(material: .sidebar))
             Rectangle().fill(Theme.line).frame(width: 1)
             VStack(spacing: 0) {
                 if !watcher.isTrusted && !model.showsOnboarding { PermissionBanner() }
@@ -59,6 +62,9 @@ struct RootView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .id(model.pane)
+                .transition(.opacity)
+                .animation(.easeOut(duration: 0.16), value: model.pane)
             }
             .background(Theme.bg)
         }
@@ -302,6 +308,8 @@ struct PermissionBanner: View {
 /// The session that is running, with its clock and a stop button.
 struct RunningSessionPill: View {
     @EnvironmentObject private var model: AppModel
+    /// Without the tinted box, for the menu bar panel.
+    var plain = false
 
     var body: some View {
         if let session = model.running, let tag = model.tags.first(where: { $0.id == session.tagID }) {
@@ -319,9 +327,8 @@ struct RunningSessionPill: View {
                 Button(L("Stop")) { model.stopSession() }
                     .buttonStyle(TRButtonStyle(kind: .bordered, height: 24))
             }
-            .padding(10)
-            .background(Palette.color(tag).opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Palette.color(tag).opacity(0.5)))
+            .padding(plain ? 0 : 10)
+            .background(Palette.color(tag).opacity(plain ? 0 : 0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
             .onTapGesture { model.pane = .focus }
             .help(L("Everything you do now counts towards this tag"))

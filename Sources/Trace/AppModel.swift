@@ -45,8 +45,8 @@ final class AppModel: ObservableObject {
     // Navigation and selection, shared so one page can send you to another.
     @Published var pane: Pane = .overview
     @Published var timelineMode: TimelineMode = .gantt
-    @Published var query = ""
-    @Published var tagFilter: Int64?
+    @Published var query = "" { didSet { memo.removeAll() } }
+    @Published var tagFilter: Int64? { didSet { memo.removeAll() } }
     /// A stretch of the day picked in the timeline; the outline sums only this.
     @Published var selection: DateInterval?
     @Published var selectedBlock: Date?
@@ -56,6 +56,8 @@ final class AppModel: ObservableObject {
     /// Prefills the new-rule form, e.g. from "Create rule" on untagged activity.
     @Published var ruleDraft: (field: RuleField, value: String)?
     @Published var showsOnboarding: Bool
+    /// The short guide to the app, shown once after setup and from the Help menu.
+    @Published var showsTour = false
 
     @Published var day = Calendar.current.startOfDay(for: Date()) {
         didSet { selection = nil; selectedBlock = nil; selectedEventID = nil; reload() }
@@ -261,6 +263,10 @@ final class AppModel: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
         refresh = timer
         DispatchQueue.main.async { [weak self] in self?.applyAppearance() }
+        if !demo, !showsOnboarding, !defaults.bool(forKey: "tourSeen") {
+            // Someone who set Trace up before the guide existed sees it once.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.showsTour = true }
+        }
     }
 
     // MARK: Day
@@ -295,7 +301,9 @@ final class AppModel: ObservableObject {
         rules = (try? store.rules()) ?? []
         sessions = (try? store.sessions()) ?? []
         running = sessions.last { $0.device.isEmpty && $0.isRunning }
-        tagger = Tagger(tags: tags, rules: rules, manual: (try? store.manualTags()) ?? [], sessions: sessions)
+        tagger = Tagger(tags: tags, rules: rules, manual: (try? store.manualTags()) ?? [], sessions: sessions,
+                        reusing: tagger)
+        memo.removeAll()
         events = events(in: interval)
         if devices.isEmpty {
             deviceTotals = [:]
@@ -415,9 +423,42 @@ final class AppModel: ObservableObject {
         sessionTimer = timer
     }
 
+    // MARK: Derived data
+    //
+    // The outline, the sessions and the lanes are worked out from the day's
+    // events. Views ask for them on every redraw, so each answer is kept
+    // until the events, the search text or the tag filter change.
+
+    private var memo: [String: Any] = [:]
+
+    private func remembered<T>(_ key: String, _ make: () -> T) -> T {
+        if let known = memo[key] as? T { return known }
+        let value = make()
+        memo[key] = value
+        return value
+    }
+
+    /// The day's events that pass the search text and tag filter.
+    var filteredEvents: [ActivityEvent] {
+        remembered("events") { events.filter(passesFilter) }
+    }
+
+    /// The filtered events grouped into sessions.
+    var filteredBlocks: [Block] {
+        remembered("blocks") { Analyzer.blocks(filteredEvents, in: dayInterval, tagger: tagger) }
+    }
+
+    func tree(_ mode: TreeMode, in interval: DateInterval) -> [TreeNode] {
+        remembered("tree-\(mode)-\(interval.start.timeIntervalSince1970)-\(interval.duration)") {
+            Analyzer.tree(filteredEvents, in: interval, tagger: tagger, mode: mode, projects: projects)
+        }
+    }
+
     func gantt(_ grouping: GanttGrouping) -> Gantt {
-        Analyzer.gantt(events.filter(passesFilter), background: background, in: dayInterval, tagger: tagger,
-                       grouping: grouping, deviceName: { [weak self] in self?.deviceName(forDevice: $0) ?? $0 })
+        remembered("gantt-\(grouping)") {
+            Analyzer.gantt(filteredEvents, background: background, in: dayInterval, tagger: tagger,
+                           grouping: grouping, deviceName: { [weak self] in self?.deviceName(forDevice: $0) ?? $0 })
+        }
     }
 
     private func reloadIfToday() {
@@ -448,6 +489,7 @@ final class AppModel: ObservableObject {
     func renameDevice(_ device: SyncedDevice, to name: String) {
         try? store.renameDevice(id: device.id, to: name)
         devices = (try? store.devices()) ?? []
+        memo.removeAll()
     }
 
     /// Whether `event` matches the search text and tag filter.
@@ -695,6 +737,13 @@ final class AppModel: ObservableObject {
     func finishOnboarding() {
         UserDefaults.standard.set(true, forKey: "onboarded")
         showsOnboarding = false
+        // One sheet has to be gone before the next can come up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.showsTour = true }
+    }
+
+    func finishTour() {
+        UserDefaults.standard.set(true, forKey: "tourSeen")
+        showsTour = false
     }
 
     func revealDatabase() {

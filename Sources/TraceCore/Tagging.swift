@@ -7,16 +7,37 @@ import Foundation
 /// tag, else the first matching rule in `sortOrder`.
 public struct Tagger: Sendable {
     public let tags: [Tag]
-    private let rulesByTag: [Int64: [Rule]]
+    private let rules: [Rule]
+    /// Per tag in `tags`, its rules with the value already lowercased.
+    private let compiled: [[CompiledRule]]
+    /// What the rules gave for events seen before. Rules are checked for
+    /// every event on every redraw, so this is what keeps the views quick.
+    private let cache: MatchCache
     private let added: [Int64: Set<Int64>]
     private let removed: [Int64: Set<Int64>]
     /// Sessions per device, sorted by start.
     private let sessions: [String: [FocusSession]]
 
-    public init(tags: [Tag], rules: [Rule], manual: [ManualTag] = [], sessions: [FocusSession] = []) {
+    /// Pass the tagger this one replaces as `previous`: when tags and rules
+    /// are unchanged, what it has already worked out is kept.
+    public init(tags: [Tag], rules: [Rule], manual: [ManualTag] = [], sessions: [FocusSession] = [],
+                reusing previous: Tagger? = nil) {
         self.sessions = Dictionary(grouping: sessions, by: \.device).mapValues { $0.sorted { $0.start < $1.start } }
         self.tags = tags.filter(\.enabled).sorted { ($0.sortOrder, $0.id ?? 0) < ($1.sortOrder, $1.id ?? 0) }
-        rulesByTag = Dictionary(grouping: rules, by: \.tagID)
+        self.rules = rules
+        if let previous, previous.tags == self.tags, previous.rules == rules {
+            compiled = previous.compiled
+            cache = previous.cache
+        } else {
+            let byTag = Dictionary(grouping: rules, by: \.tagID)
+            compiled = self.tags.map { tag in
+                (tag.id.flatMap { byTag[$0] } ?? []).compactMap { rule in
+                    let needle = rule.value.lowercased()
+                    return needle.isEmpty ? nil : CompiledRule(field: rule.field, op: rule.op, needle: needle)
+                }
+            }
+            cache = MatchCache()
+        }
         var added: [Int64: Set<Int64>] = [:], removed: [Int64: Set<Int64>] = [:]
         for m in manual {
             if m.removed { removed[m.eventID, default: []].insert(m.tagID) }
@@ -26,14 +47,18 @@ public struct Tagger: Sendable {
         self.removed = removed
     }
 
-    private func matches(_ tag: Tag, _ event: ActivityEvent) -> Bool {
-        guard let id = tag.id, let rules = rulesByTag[id] else { return false }
-        return rules.contains { $0.matches(event) }
-    }
-
     /// Tags the rules alone would apply.
     public func automatic(for event: ActivityEvent) -> [Tag] {
-        tags.filter { matches($0, event) }
+        let key = MatchKey(bundleID: event.bundleID, appName: event.appName, category: event.category,
+                           title: event.title, path: event.path, url: event.url)
+        if let known = cache.value(for: key) { return known }
+        let fields = LoweredFields(event)
+        var result: [Tag] = []
+        for (index, tag) in tags.enumerated() where compiled[index].contains(where: { $0.matches(fields) }) {
+            result.append(tag)
+        }
+        cache.set(result, for: key)
+        return result
     }
 
     /// The tag of the session an event falls in, if any.
@@ -68,13 +93,78 @@ public struct Tagger: Sendable {
         if overridden || !sessions.isEmpty, sessions[event.device] != nil || overridden {
             return tags(for: event).first
         }
-        return tags.first { matches($0, event) }
+        return automatic(for: event).first
     }
 
     /// Whether `tag` is on `event` because the user put it there.
     public func isManual(_ tag: Tag, for event: ActivityEvent) -> Bool {
         guard let id = event.id, let tagID = tag.id else { return false }
         return added[id]?.contains(tagID) ?? false
+    }
+}
+
+private struct MatchKey: Hashable, Sendable {
+    let bundleID: String
+    let appName: String
+    let category: String?
+    let title: String
+    let path: String?
+    let url: String?
+}
+
+/// The parts of an event rules look at, lowercased once.
+private struct LoweredFields {
+    let bundleID: String, appName: String, category: String, title: String, path: String, url: String
+
+    init(_ e: ActivityEvent) {
+        bundleID = e.bundleID.lowercased()
+        appName = e.appName.lowercased()
+        category = (e.category ?? "").lowercased()
+        title = e.title.lowercased()
+        path = (e.path ?? "").lowercased()
+        url = (e.url ?? "").lowercased()
+    }
+}
+
+/// Same outcome as `Rule.matches`, without lowercasing on every check.
+private struct CompiledRule: Sendable {
+    let field: RuleField
+    let op: RuleOp
+    let needle: String
+
+    func matches(_ f: LoweredFields) -> Bool {
+        switch field {
+        case .app: return test(f.bundleID) || test(f.appName)
+        case .category: return test(f.category)
+        case .path: return test(f.path)
+        case .url: return test(f.url)
+        case .title: return test(f.title)
+        }
+    }
+
+    private func test(_ hay: String) -> Bool {
+        guard !hay.isEmpty else { return false }
+        switch op {
+        case .equals: return hay == needle
+        case .contains: return hay.contains(needle)
+        case .hasPrefix: return hay.hasPrefix(needle)
+        }
+    }
+}
+
+private final class MatchCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [MatchKey: [Tag]] = [:]
+
+    func value(for key: MatchKey) -> [Tag]? {
+        lock.lock(); defer { lock.unlock() }
+        return storage[key]
+    }
+
+    func set(_ value: [Tag], for key: MatchKey) {
+        lock.lock(); defer { lock.unlock() }
+        if storage.count > 50_000 { storage.removeAll(keepingCapacity: true) }
+        storage[key] = value
     }
 }
 

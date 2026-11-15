@@ -30,8 +30,8 @@ struct TagFilterBar: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 28)
-            .background(isOn ? Theme.panel : .clear, in: Capsule())
-            .overlay(Capsule().strokeBorder(isOn ? Theme.ink : Theme.line))
+            .background(isOn ? Theme.hover : .clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(isOn ? .clear : Theme.line))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -53,7 +53,7 @@ struct RecordsView: View {
     }
 
     var body: some View {
-        let blocks = Analyzer.blocks(events, in: model.dayInterval, tagger: model.tagger)
+        let blocks = model.filteredBlocks
         let selected = model.events.first { $0.id == model.selectedEventID }
         let current = blocks.first { $0.start == model.selectedBlock }
             ?? selected.flatMap { event in blocks.first { $0.start <= event.start && event.start < $0.end } }

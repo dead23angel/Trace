@@ -294,12 +294,12 @@
 "Click a name to change it, for example Home and Lab" = "点名字可以修改，比如“家里”“实验室”";
 
 /* 甘特、专注、目标、项目、回顾 */
-"Lanes" = "轨道";
+"Lanes" = "轨迹";
 "By project" = "按项目";
 "No files were open in this period, so there are no projects to show." = "这段时间没有打开过文件，所以没有项目可显示。";
 "Projects are found from the folder each file is in" = "根据文件所在的文件夹自动识别项目";
-"The day in lanes" = "一天的轨道";
-"Each lane is one thing; bars that line up happened at the same time" = "每条轨道是一件事，上下对齐的色条就是同时发生的";
+"The day in lanes" = "一天的轨迹";
+"Each lane is one thing; bars that line up happened at the same time" = "每条轨迹是一件事，上下对齐的色条就是同时发生的";
 "See what happened" = "查看这段的明细";
 "Clear" = "清除";
 "IN FRONT" = "前台";
@@ -334,7 +334,7 @@
 "%d in all" = "共 %d 次";
 "What pulled you out of focus" = "把你从专注里拉出去的";
 "%d times" = "%d 次";
-"Open as lanes" = "展开为轨道";
+"Open as lanes" = "展开为轨迹";
 "When sound was playing" = "有声音播放的时段";
 "When the microphone was in use" = "麦克风在使用的时段";
 "How this tag counts when judging focus" = "判断专注度时，这个标签算哪一类";
@@ -375,7 +375,6 @@
 "Everything you do now counts towards this tag" = "现在做的所有事都计入这个标签";
 "Until I stop it" = "直到我结束";
 "Start a session…" = "开始一个时段…";
-"None yet. A goal is a daily target for a tag, such as Study for at least 2 hours." = "还没有目标。目标是给某个标签定的每日指标，比如“学习至少 2 小时”。";
 "Start a session" = "开始一个时段";
 "From the moment you start until you stop, everything you do counts as the tag you pick, whatever the rules say. Use it for a game, a study block, or anything the rules cannot guess." = "从开始到结束，这期间做的所有事都算到你选的标签上，不管规则怎么判断。适合打游戏、集中学习，或者任何规则猜不出来的事。";
 "Count it as" = "计入";
@@ -392,7 +391,6 @@
 "Everything you do now counts as %@." = "现在做的所有事都计入“%@”。";
 "Today's sessions" = "今天的时段";
 "Sessions that day" = "当天的时段";
-"Delete one and its records go back to their own tags" = "删除后，其中的记录恢复原来的标签";
 "No sessions. Records are tagged by the rules alone." = "没有手动时段，记录完全按规则打标签。";
 "now" = "现在";
 "planned %@" = "计划 %@";
@@ -437,3 +435,21 @@
 "Trace itself is in front" = "最前面是 Trace 自己";
 "Trace does not record its own window" = "Trace 不记录自己的窗口";
 "Show this tag in the timeline" = "在时间线中查看这个标签";
+"Delete this session?" = "删除这个时段？";
+"Its records are kept and go back to their own tags." = "其中的记录会保留，并恢复原来的标签。";
+"A goal is a daily target for a tag, such as Study for at least 2 hours." = "目标是给某个标签定的每日指标，比如“学习至少 2 小时”。";
+"Show the guide" = "查看使用引导";
+"It records by itself" = "它会自己记录";
+"Trace notes the app, window, file and page in front of you. There is nothing to start or stop; it stays in the menu bar and keeps going when this window is closed." = "Trace 会记下你面前的应用、窗口、文件和网页。不需要开始或停止，它常驻菜单栏，关掉这个窗口也照常记录。";
+"See where the day went" = "看看一天去哪了";
+"Overview sums up today. In Timeline, open any tag down to a single file or page, or see the whole day side by side." = "“概览”汇总今天的情况。在“时间线”里，可以把任意标签一层层展开到某个文件或网页，也可以并排查看一整天。";
+"Tags sort your time" = "标签帮你归类时间";
+"Common apps and sites are tagged for you. Add your own tags under Tags, and rules under Rules to apply them automatically." = "常见的应用和网站已经归好类。可以在“标签”里添加自己的标签，在“规则”里设定条件让它自动打上。";
+"Sessions and goals" = "时段和目标";
+"Start a session and everything counts towards one tag until you stop. A daily goal keeps an eye on the tags that matter to you." = "开始一个时段后，直到你停止，所有时间都算在同一个标签上。每日目标帮你盯住最在意的标签。";
+"Your records stay on this Mac" = "记录只留在这台 Mac 上";
+"Nothing is uploaded. Pause from the menu bar at any time, and leave apps out under Settings." = "不会上传任何内容。随时可以从菜单栏暂停，也可以在“设置”里排除某些应用。";
+"Skip" = "跳过";
+"Back" = "上一步";
+"Get started" = "开始使用";
+"Next" = "下一步";

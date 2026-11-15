@@ -50,6 +50,24 @@ enum Palette {
 
 // MARK: Surfaces
 
+/// A system material behind a view: the translucent sidebar of a window, or
+/// the near-white sheet of a menu.
+struct MaterialBackground: NSViewRepresentable {
+    var material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.material = material
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+    }
+}
+
 /// The rounded panel every section sits on.
 struct Card<Content: View>: View {
     var padding: EdgeInsets = EdgeInsets(top: 16, leading: 20, bottom: 16, trailing: 20)
@@ -60,8 +78,8 @@ struct Card<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line))
-            .shadow(color: Theme.shadow, radius: 10, y: 4)
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line.opacity(0.6)))
+            .shadow(color: Theme.shadow, radius: 6, y: 2)
     }
 }
 
@@ -74,6 +92,8 @@ extension EdgeInsets {
 struct PageHeader<Leading: View, Trailing: View>: View {
     let title: String
     var subtitle: String = ""
+    /// What the page is for; shown when the pointer rests on the title.
+    var hint: String = ""
     /// A short highlighted note after the title, e.g. "Today".
     var pill: String = ""
     @ViewBuilder var leading: Leading
@@ -82,7 +102,7 @@ struct PageHeader<Leading: View, Trailing: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             leading
-            Text(title).font(.system(size: 20, weight: .bold)).tracking(-0.2).lineLimit(1)
+            Text(title).font(.system(size: 20, weight: .bold)).tracking(-0.2).lineLimit(1).help(hint)
             if !pill.isEmpty {
                 Text(pill)
                     .font(.system(size: 12, weight: .semibold))
@@ -102,8 +122,9 @@ struct PageHeader<Leading: View, Trailing: View>: View {
 }
 
 extension PageHeader where Leading == EmptyView {
-    init(title: String, subtitle: String = "", pill: String = "", @ViewBuilder trailing: () -> Trailing) {
-        self.init(title: title, subtitle: subtitle, pill: pill, leading: { EmptyView() }, trailing: trailing)
+    init(title: String, subtitle: String = "", hint: String = "", pill: String = "",
+         @ViewBuilder trailing: () -> Trailing) {
+        self.init(title: title, subtitle: subtitle, hint: hint, pill: pill, leading: { EmptyView() }, trailing: trailing)
     }
 }
 
@@ -112,12 +133,10 @@ struct SectionTitle: View {
     var note: String = ""
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(title).font(.system(size: 14, weight: .semibold))
-            if !note.isEmpty {
-                Text(note).font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
-            }
-        }
+        // The note explains the section; it shows when the pointer rests on
+        // the title rather than taking up a line of its own.
+        Text(title).font(.system(size: 14, weight: .semibold))
+            .help(note)
     }
 }
 
@@ -127,6 +146,7 @@ struct SectionTitle: View {
 struct Segmented<Value: Hashable>: View {
     let options: [(value: Value, title: String)]
     @Binding var selection: Value
+    @Namespace private var thumb
 
     var body: some View {
         HStack(spacing: 0) {
@@ -139,8 +159,13 @@ struct Segmented<Value: Hashable>: View {
                         .foregroundStyle(isOn ? Theme.ink : Theme.muted)
                         .padding(.horizontal, 14)
                         .frame(minHeight: 26)
-                        .background(isOn ? Theme.panel : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .shadow(color: isOn ? Theme.shadow : .clear, radius: 1.5, y: 1)
+                        .background {
+                            if isOn {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.panel)
+                                    .shadow(color: Theme.shadow, radius: 1.5, y: 1)
+                                    .matchedGeometryEffect(id: "thumb", in: thumb)
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -150,6 +175,7 @@ struct Segmented<Value: Hashable>: View {
         .padding(2)
         .background(Theme.hover, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .fixedSize()
+        .animation(.snappy(duration: 0.22), value: selection)
     }
 }
 
@@ -186,6 +212,24 @@ struct TRButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
+        Hoverable(style: self, configuration: configuration)
+    }
+
+    /// Brightens slightly under the pointer, as system buttons do.
+    private struct Hoverable: View {
+        let style: TRButtonStyle
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            style.label(configuration)
+                .brightness(hovering && style.kind != .link ? (style.kind == .prominent ? 0.06 : -0.03) : 0)
+                .onHover { hovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+
+    fileprivate func label(_ configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         return configuration.label
             .fontWeight(kind == .bordered ? .medium : .semibold)
