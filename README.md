@@ -169,4 +169,6 @@ Issues and pull requests are welcome. Please run `swift test` before opening a p
 
 ## License
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE). You may use, change and share Trace freely, also at work. If you distribute it or a version based on it, you must do so under the same license and make the source available.
+
+Versions up to 0.2.1 were released under the MIT license.

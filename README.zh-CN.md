@@ -169,4 +169,6 @@ open build/Trace.app
 
 ## 许可证
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE)。你可以自由使用、修改和分享 Trace，在工作中使用也可以。如果你分发 Trace 或基于它修改的版本，必须采用同样的许可证并公开源码。
+
+0.2.1 及之前的版本以 MIT 许可证发布。
