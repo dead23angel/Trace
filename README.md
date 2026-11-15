@@ -26,9 +26,7 @@ Trace sits in the menu bar and records which app, window, file and web page is i
 
 ## Why Trace
 
-[Timing](https://timingapp.com) set the standard for automatic time tracking on the Mac, and it is a paid app. Trace started from a simple question: could the same idea be free and open? It records your day in the same hands-off way, it costs nothing, the source is here to read and change, and your records never leave your Mac unless you turn on sync yourself.
-
-Trace is an independent project. It is not affiliated with Timing and does not have every feature Timing has.
+[Timing](https://timingapp.com) set the standard for automatic time tracking on the Mac, and it is a paid app. Trace is a free, open-source alternative: it records your day in the same hands-off way, it costs nothing, the source is here to read and change, and your records never leave your Mac unless you turn on sync yourself.
 
 ## Features
 
