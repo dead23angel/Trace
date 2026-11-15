@@ -201,8 +201,10 @@ struct FocusCard: View {
                     stat(L("Deep work"), Fmt.duration(focus.deepSeconds),
                          focus.deepCount == 0 ? L("none yet")
                          : String(format: L("%1$d stretches, longest %2$@"), focus.deepCount, Fmt.duration(focus.longestDeep)))
-                    stat(L("Share of the day"), "\(Int((focus.deepShare * 100).rounded()))%", L("of tracked time"))
-                    stat(L("Distraction"), Fmt.duration(focus.distractionSeconds), L("on distraction tags"))
+                    stat(L("Share of the day"), "\(Int((focus.deepShare * 100).rounded()))%", "")
+                        .help(L("of tracked time"))
+                    stat(L("Distraction"), Fmt.duration(focus.distractionSeconds), "")
+                        .help(L("on distraction tags"))
                 }
                 Hairline()
                 VStack(alignment: .leading, spacing: 6) {
@@ -250,9 +252,11 @@ struct FocusCard: View {
     private func stat(_ title: String, _ value: String, _ note: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title).font(.system(size: 12)).foregroundStyle(Theme.muted)
-            Text(value).font(.system(size: 18, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
-            Text(note).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            Text(value).font(.system(size: 20, weight: .bold)).tracking(-0.2).lineLimit(1).minimumScaleFactor(0.7)
+            if !note.isEmpty {
+                Text(note).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }

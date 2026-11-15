@@ -88,8 +88,8 @@ struct Page<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) { content }
-                .padding(EdgeInsets(top: topInset, leading: 28, bottom: 28, trailing: 28))
+            VStack(alignment: .leading, spacing: 18) { content }
+                .padding(EdgeInsets(top: topInset, leading: 32, bottom: 32, trailing: 32))
         }
     }
 }
@@ -274,8 +274,7 @@ struct RecordingStatus: View {
             }
         }
         .padding(10)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.line))
+        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

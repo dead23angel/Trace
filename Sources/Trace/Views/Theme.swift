@@ -25,11 +25,13 @@ enum Theme {
     static let onAccent = dyn(0xFFFFFF, 0x04213F)
     static let soft = dyn(0xE3EEFD, 0x1B3350)
     static let ok = dyn(0x2DA44E, 0x30D158)
-    static let shadow = dyn(0x000000, 0x000000, alpha: (0.06, 0.25))
+    static let shadow = dyn(0x000000, 0x000000, alpha: (0.05, 0.25))
+    /// The quiet fill of a control that is not the main action.
+    static let fill = dyn(0x000000, 0xFFFFFF, alpha: (0.055, 0.10))
 
     static let palette: [Color] = [
-        dyn(0x007AFF, 0x0A84FF), dyn(0xA550D8, 0xBF5AF2), dyn(0x2DA44E, 0x30D158), dyn(0xDB7A00, 0xFF9F0A),
-        dyn(0xF0284F, 0xFF375F), dyn(0x8E8E93, 0x98989D), dyn(0x1E9BB3, 0x40C8E0), dyn(0xA2845E, 0xAC8E68),
+        dyn(0x3478F6, 0x4C8DFF), dyn(0x9A5CE0, 0xB57BF0), dyn(0x34A86B, 0x3CCB7F), dyn(0xE8912D, 0xF5A947),
+        dyn(0xEB4B6D, 0xF76484), dyn(0x8E8E93, 0x98989D), dyn(0x2AA3B8, 0x4CC3D9), dyn(0xA78B67, 0xB89A74),
     ]
 
     static let mono = Font.system(size: 12, design: .monospaced)
@@ -77,9 +79,9 @@ struct Card<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line.opacity(0.6)))
-            .shadow(color: Theme.shadow, radius: 6, y: 2)
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line.opacity(0.45)))
+            .shadow(color: Theme.shadow, radius: 8, y: 3)
     }
 }
 
@@ -102,7 +104,7 @@ struct PageHeader<Leading: View, Trailing: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             leading
-            Text(title).font(.system(size: 20, weight: .bold)).tracking(-0.2).lineLimit(1).help(hint)
+            Text(title).font(.system(size: 22, weight: .bold)).tracking(-0.4).lineLimit(1).help(hint)
             if !pill.isEmpty {
                 Text(pill)
                     .font(.system(size: 12, weight: .semibold))
@@ -135,7 +137,7 @@ struct SectionTitle: View {
     var body: some View {
         // The note explains the section; it shows when the pointer rests on
         // the title rather than taking up a line of its own.
-        Text(title).font(.system(size: 14, weight: .semibold))
+        Text(title).font(.system(size: 15, weight: .semibold))
             .help(note)
     }
 }
@@ -199,8 +201,7 @@ struct SearchField: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.line))
+        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -238,7 +239,6 @@ struct TRButtonStyle: ButtonStyle {
             .frame(minHeight: height)
             .foregroundStyle(foreground)
             .background(background, in: shape)
-            .overlay(shape.strokeBorder(kind == .bordered ? Theme.line : .clear))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(shape)
     }
@@ -255,7 +255,7 @@ struct TRButtonStyle: ButtonStyle {
     private var background: Color {
         switch kind {
         case .prominent: return isEnabled ? Theme.accent : Theme.bg
-        case .bordered: return Theme.panel
+        case .bordered: return Theme.fill
         case .link: return .clear
         }
     }
@@ -278,8 +278,7 @@ struct IconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .bold))
                 .frame(width: 28, height: 28)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Theme.line))
+                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -316,7 +315,7 @@ struct Swatch: View {
     }
 }
 
-/// A tag as an outlined capsule.
+/// A tag as a capsule tinted with its colour.
 struct TagChip: View {
     let tag: Tag?
     var round = false
@@ -328,8 +327,7 @@ struct TagChip: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
-        .background(Theme.panel, in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.line))
+        .background(Palette.color(tag).opacity(0.14), in: Capsule())
         .fixedSize()
     }
 }
