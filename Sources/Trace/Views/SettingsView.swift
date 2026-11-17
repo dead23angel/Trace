@@ -85,6 +85,7 @@ struct SettingsView: View {
                 Text(L("System")).tag(AppLanguage.system)
                 Text("简体中文").tag(AppLanguage.zhHans)
                 Text("English").tag(AppLanguage.en)
+                Text("Русский").tag(AppLanguage.ru)
             }
             .labelsHidden()
             .fixedSize()
